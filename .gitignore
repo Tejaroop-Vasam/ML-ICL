@@ -1,0 +1,24 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Data & Model weights cache
+data/cache/
+data/raw/
+*.pt
+*.bin
+*.safetensors
+
+# Logs & Results
+results/
+logs/
+.system_generated/
+.DS_Store
