@@ -71,8 +71,29 @@ class BaseDataLoader(ABC):
     def get_cache_path(self, split: str) -> Path:
         return self.cache_dir / self.dataset_name / f"{split}.jsonl"
 
+    def get_npz_cache_path(self, split: str) -> Path:
+        return self.cache_dir / self.dataset_name / f"{split}.npz"
+
+    def get_numpy_dataset(self, split: str = "test") -> "NumpyDataset":
+        """Load split directly as a fast NumpyDataset."""
+        from src.data.numpy_dataset import NumpyDataset
+        npz_path = self.get_npz_cache_path(split)
+        if npz_path.exists():
+            return NumpyDataset.load_npz(npz_path)
+
+        # Fall back to examples and convert/cache
+        examples = self.get_split(split)
+        np_ds = NumpyDataset.from_examples(
+            examples=examples,
+            label_names=self.classes,
+            dataset_name=self.dataset_name,
+            split=split,
+        )
+        np_ds.save_npz(npz_path)
+        return np_ds
+
     def load_data(self, force_reload: bool = False) -> Dict[str, List[ICLExample]]:
-        """Load dataset splits, using local JSONL cache if present.
+        """Load dataset splits, using local JSONL/NPZ cache if present.
 
         Args:
             force_reload: If True, re-fetches raw dataset and updates cache.
@@ -95,11 +116,21 @@ class BaseDataLoader(ABC):
         logger.info(f"Fetching raw data for {self.dataset_name}...")
         self._splits = self._fetch_raw_splits()
 
-        # Save to cache
+        # Save to cache in both JSONL and compressed NPZ formats
+        from src.data.numpy_dataset import NumpyDataset
         for split_name, examples in self._splits.items():
             cache_file = self.get_cache_path(split_name)
             self._write_jsonl(examples, cache_file)
-            logger.info(f"Cached {len(examples)} examples for {self.dataset_name}:{split_name} -> {cache_file}")
+
+            npz_file = self.get_npz_cache_path(split_name)
+            np_ds = NumpyDataset.from_examples(
+                examples=examples,
+                label_names=self.classes,
+                dataset_name=self.dataset_name,
+                split=split_name,
+            )
+            np_ds.save_npz(npz_file)
+            logger.info(f"Cached {len(examples)} examples for {self.dataset_name}:{split_name} -> {cache_file} & {npz_file.name}")
 
         return self._splits
 
@@ -117,39 +148,16 @@ class BaseDataLoader(ABC):
         n_samples: Optional[int] = None,
         seed: Optional[int] = None,
     ) -> List[ICLExample]:
-        """Get a balanced/stratified subset of examples for manageable evaluation.
+        """Get a balanced/stratified subset of examples using fast vectorized NumPy sampling."""
+        np_ds = self.get_numpy_dataset(split)
+        if n_samples is None or n_samples >= len(np_ds):
+            return self.get_split(split)
 
-        Args:
-            split: Which split to sample from ('test' or 'validation' or 'train').
-            n_samples: Total number of samples. If None or >= total size, returns all.
-            seed: Random seed for deterministic reproducibility.
-        """
-        examples = self.get_split(split)
-        total_len = len(examples)
-        if n_samples is None or n_samples >= total_len:
-            return examples
-
-        rnd = np.random.RandomState(seed if seed is not None else self.seed)
-
-        # Group indices by class label
-        by_class: Dict[int, List[int]] = {c: [] for c in range(self.num_classes)}
-        for idx, ex in enumerate(examples):
-            if ex.label in by_class:
-                by_class[ex.label].append(idx)
-
-        # Distribute n_samples evenly across classes
-        per_class = n_samples // self.num_classes
-        remainder = n_samples % self.num_classes
-
-        selected_indices: List[int] = []
-        for class_id, idxs in sorted(by_class.items()):
-            k = per_class + (1 if class_id < remainder else 0)
-            k = min(k, len(idxs))
-            chosen = rnd.choice(idxs, size=k, replace=False)
-            selected_indices.extend(chosen)
-
-        rnd.shuffle(selected_indices)
-        return [examples[i] for i in selected_indices]
+        sampled_np = np_ds.stratified_sample(
+            n_samples=n_samples,
+            seed=seed if seed is not None else self.seed,
+        )
+        return sampled_np.to_examples()
 
     def get_candidate_demonstration_pool(
         self,

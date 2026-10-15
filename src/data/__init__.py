@@ -1,6 +1,7 @@
 """Data loading package for In-Context Learning benchmarks."""
 
 from src.data.example import ICLExample
+from src.data.numpy_dataset import NumpyDataset
 from src.data.base_loader import BaseDataLoader
 from src.data.sst2_loader import SST2DataLoader
 from src.data.agnews_loader import AGNewsDataLoader
@@ -10,6 +11,7 @@ from src.data.registry import get_dataset, list_datasets, get_all_datasets
 
 __all__ = [
     "ICLExample",
+    "NumpyDataset",
     "BaseDataLoader",
     "SST2DataLoader",
     "AGNewsDataLoader",

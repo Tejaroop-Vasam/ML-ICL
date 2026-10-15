@@ -62,6 +62,27 @@ class TestDataLoaders(unittest.TestCase):
             self.assertNotIn("<br />", ex.text)
             self.assertGreater(ex.num_words, 0)
 
+    def test_numpy_dataset(self):
+        from src.data import NumpyDataset
+        loader = get_dataset("sst2")
+        np_ds = loader.get_numpy_dataset("test")
+        self.assertIsInstance(np_ds, NumpyDataset)
+        self.assertEqual(len(np_ds), 1821)
+
+        # Test indexing & slicing
+        text, label, item_id = np_ds[0]
+        self.assertIsInstance(text, str)
+        self.assertIn(label, [0, 1])
+
+        # Test stratified sampling
+        sample = np_ds.stratified_sample(n_samples=10, seed=42)
+        self.assertEqual(len(sample), 10)
+        self.assertEqual(list(sample.class_counts.values()), [5, 5])
+
+        # Test length filtering
+        long_subset = np_ds.filter_by_word_length(min_words=20)
+        self.assertTrue(all(len(t.split()) >= 20 for t in long_subset.texts))
+
 
 if __name__ == "__main__":
     unittest.main()

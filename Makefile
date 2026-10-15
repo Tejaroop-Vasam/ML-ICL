@@ -1,11 +1,12 @@
 PYTHON := .venv/bin/python
 
-.PHONY: help install data profile test exp1 exp2 exp4 exp5 proposed plot clean
+.PHONY: help install data npz profile test exp1 exp2 exp4 exp5 proposed plot clean
 
 help:
 	@echo "Available commands (similar to npm scripts):"
 	@echo "  make install     - Install all required Python packages into .venv"
 	@echo "  make data        - Download and cache all 4 benchmark datasets"
+	@echo "  make npz         - Convert and cache all datasets into compressed NumPy .npz"
 	@echo "  make profile     - Profile sequence length and word counts across datasets"
 	@echo "  make test        - Run the complete unit test suite"
 	@echo "  make exp1        - Run Experiment 1: Baselines (Zero-Shot vs Random vs Similarity)"
@@ -21,6 +22,9 @@ install:
 
 data:
 	$(PYTHON) data/download_and_verify.py --dataset all
+
+npz:
+	$(PYTHON) data/export_to_npz.py
 
 profile:
 	$(PYTHON) data/token_profiler.py
