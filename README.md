@@ -193,9 +193,13 @@ ML-ICL/
 ├── configs/                    # YAML configuration files for experiments & models
 │   ├── models.yaml             # Model definitions (Llama-3-8B, Llama-3.2-1B)
 │   └── experiments/            # Experiment configs (k-shot, budget, ordering)
-├── data/                       # Dataset processing and caching scripts
-│   ├── download_datasets.py    # Downloads & partitions SST-2, AG News, TREC, IMDb
-│   └── token_profiler.py       # Computes token distributions for each dataset
+├── data/                       # Cached and processed datasets
+│   ├── cache/                  # Computed sentence embeddings (.npy)
+│   └── processed/              # Formatted JSONL and .npz partitions
+├── scripts/                    # Standalone utility & preparation scripts
+│   ├── download_models.py      # Downloads Qwen3 models locally via HuggingFace Hub
+│   ├── export_to_npz.py        # Converts processed datasets to NumPy archives
+│   └── token_profiler.py       # Profiles token & word distributions across benchmarks
 ├── src/
 │   ├── baselines/              # Baseline runners
 │   │   ├── zero_shot.py

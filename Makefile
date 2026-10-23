@@ -1,11 +1,11 @@
 PYTHON := .venv/bin/python
 
-.PHONY: help install data npz profile test exp1 exp2 exp4 exp5 proposed plot clean
+.PHONY: help install models npz profile test exp1 exp2 exp4 exp5 proposed plot clean
 
 help:
 	@echo "Available commands (similar to npm scripts):"
 	@echo "  make install     - Install all required Python packages into .venv"
-	@echo "  make data        - Download and cache all 4 benchmark datasets"
+	@echo "  make models      - Download Qwen3 models locally via Hugging Face Hub"
 	@echo "  make npz         - Convert and cache all datasets into compressed NumPy .npz"
 	@echo "  make profile     - Profile sequence length and word counts across datasets"
 	@echo "  make test        - Run the complete unit test suite"
@@ -20,29 +20,32 @@ help:
 install:
 	$(PYTHON) -m pip install -r requirements.txt
 
-data:
-	$(PYTHON) data/download_and_verify.py --dataset all
+models:
+	$(PYTHON) scripts/download_models.py
+
+run_all:
+	$(PYTHON) scripts/run_all_experiments.py --models 0.6b 1.7b --datasets yelp_polarity yahoo_answers trec --n_eval 30 --k 4
 
 npz:
-	$(PYTHON) data/export_to_npz.py
+	$(PYTHON) scripts/export_to_npz.py
 
 profile:
-	$(PYTHON) data/token_profiler.py
+	$(PYTHON) scripts/token_profiler.py
 
 test:
 	$(PYTHON) -m unittest discover tests
 
 exp1:
-	$(PYTHON) experiments/run_experiment.py --experiment exp1_baselines --dataset sst2 --k 4 --n_eval 100
+	$(PYTHON) experiments/run_experiment.py --experiment exp1_baselines --dataset yelp_polarity --k 4 --n_eval 100
 
 exp2:
-	$(PYTHON) experiments/run_experiment.py --experiment exp2_k_sweep --dataset sst2 --n_eval 100
+	$(PYTHON) experiments/run_experiment.py --experiment exp2_k_sweep --dataset yelp_polarity --n_eval 100
 
 exp4:
-	$(PYTHON) experiments/run_experiment.py --experiment exp4_ordering --dataset sst2 --k 4 --n_eval 100
+	$(PYTHON) experiments/run_experiment.py --experiment exp4_ordering --dataset yelp_polarity --k 4 --n_eval 100
 
 exp5:
-	$(PYTHON) experiments/run_experiment.py --experiment exp5_formatting --dataset sst2 --k 4 --n_eval 100
+	$(PYTHON) experiments/run_experiment.py --experiment exp5_formatting --dataset yelp_polarity --k 4 --n_eval 100
 
 proposed:
 	$(PYTHON) experiments/run_experiment.py --experiment proposed_method --dataset imdb --token_budget 1500 --k 4 --n_eval 100

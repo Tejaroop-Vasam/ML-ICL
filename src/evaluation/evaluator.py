@@ -3,7 +3,7 @@
 import time
 import logging
 from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
 import numpy as np
 
 from src.data.base_loader import BaseDataLoader
@@ -38,9 +38,18 @@ class EvaluationResult:
 class ICLEvaluator:
     """Evaluates zero-shot or few-shot ICL performance on a dataset."""
 
-    def __init__(self, data_loader: BaseDataLoader, llm: BaseLLM):
+    def __init__(
+        self,
+        data_loader: BaseDataLoader,
+        llm: Optional[Union[BaseLLM, str]] = None,
+    ):
         self.loader = data_loader
-        self.llm = llm
+        if isinstance(llm, str) or llm is None:
+            from src.models.registry import get_model
+            model_target = llm or "Qwen/Qwen3-0.6B"
+            self.llm = get_model(model_target)
+        else:
+            self.llm = llm
 
     def run_evaluation(
         self,

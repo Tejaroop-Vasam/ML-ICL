@@ -73,15 +73,15 @@ def profile_datasets(cache_dir: str = "data/processed", split: str = "test"):
             f"{row['words_max']:<10d}"
         )
 
-    # Highlight SST-2 vs IMDb comparison
-    sst2_row = next((r for r in stats_table if r["dataset"] == "sst2"), None)
+    # Highlight Yelp Polarity vs IMDb comparison (both sentiment, different lengths)
+    yelp_row = next((r for r in stats_table if r["dataset"] == "yelp_polarity"), None)
     imdb_row = next((r for r in stats_table if r["dataset"] == "imdb"), None)
-    if sst2_row and imdb_row:
-        ratio = imdb_row["words_mean"] / max(sst2_row["words_mean"], 1)
+    if yelp_row and imdb_row:
+        ratio = imdb_row["words_mean"] / max(yelp_row["words_mean"], 1)
         print("\n" + "=" * 80)
-        print(f"📊 Length Contrast: IMDb reviews are ~{ratio:.1f}x longer on average than SST-2 sentences.")
-        print(f"   • SST-2: Mean {sst2_row['words_mean']:.1f} words (Median {sst2_row['words_median']:.1f})")
-        print(f"   • IMDb:  Mean {imdb_row['words_mean']:.1f} words (Median {imdb_row['words_median']:.1f})")
+        print(f"📊 Length Contrast: IMDb reviews are ~{ratio:.1f}x longer on average than Yelp Polarity.")
+        print(f"   • Yelp Polarity: Mean {yelp_row['words_mean']:.1f} words (Median {yelp_row['words_median']:.1f})")
+        print(f"   • IMDb:          Mean {imdb_row['words_mean']:.1f} words (Median {imdb_row['words_median']:.1f})")
         print("   This validates using IMDb to evaluate length-induced degradation while keeping the sentiment task fixed.")
         print("=" * 80 + "\n")
 

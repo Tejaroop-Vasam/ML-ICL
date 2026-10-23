@@ -307,8 +307,8 @@ def main():
         choices=["exp1_baselines", "exp2_k_sweep", "exp4_ordering", "exp5_formatting", "proposed_method", "all"],
         help="Which experiment group to execute",
     )
-    parser.add_argument("--dataset", type=str, default="sst2", choices=list_datasets())
-    parser.add_argument("--model", type=str, default="mock", help="Model name or 'mock'")
+    parser.add_argument("--dataset", type=str, default="yelp_polarity", choices=list_datasets())
+    parser.add_argument("--model", type=str, default="0.6b", help="Local model scale or name: '0.6b', '1.7b', '4b', '8b'")
     parser.add_argument("--k", type=int, default=4, help="Number of demonstrations")
     parser.add_argument("--n_eval", type=int, default=100, help="Number of evaluation test samples")
     parser.add_argument("--pool_size", type=int, default=500, help="Candidate pool size from train split")

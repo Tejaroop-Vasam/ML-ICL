@@ -28,7 +28,7 @@ class BaseDataLoader(ABC):
     @property
     @abstractmethod
     def dataset_name(self) -> str:
-        """Name of the dataset (e.g., 'sst2', 'ag_news', 'trec', 'imdb')."""
+        """Name of the dataset (e.g., 'yelp_polarity', 'yahoo_answers', 'trec', 'imdb')."""
         pass
 
     @property

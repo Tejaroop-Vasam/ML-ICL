@@ -2,14 +2,14 @@
 
 from typing import Dict, Type, List, Optional
 from src.data.base_loader import BaseDataLoader
-from src.data.sst2_loader import SST2DataLoader
-from src.data.agnews_loader import AGNewsDataLoader
+from src.data.yelp_loader import YelpPolarityDataLoader
+from src.data.yahoo_loader import YahooAnswersDataLoader
 from src.data.trec_loader import TRECDataLoader
 from src.data.imdb_loader import IMDbDataLoader
 
 DATASET_REGISTRY: Dict[str, Type[BaseDataLoader]] = {
-    "sst2": SST2DataLoader,
-    "ag_news": AGNewsDataLoader,
+    "yelp_polarity": YelpPolarityDataLoader,
+    "yahoo_answers": YahooAnswersDataLoader,
     "trec": TRECDataLoader,
     "imdb": IMDbDataLoader,
 }
@@ -28,7 +28,7 @@ def get_dataset(
     """Factory function to get a dataset loader instance by name.
 
     Args:
-        dataset_name: One of 'sst2', 'ag_news', 'trec', 'imdb'.
+        dataset_name: One of 'yelp_polarity', 'yahoo_answers', 'trec', 'imdb'.
         cache_dir: Directory where processed JSONL splits are cached.
         seed: Random seed for reproducible splits and sampling.
     """

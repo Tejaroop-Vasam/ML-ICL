@@ -1,36 +1,34 @@
-"""Model registry and factory."""
+"""Local model registry and factory."""
 
 from typing import Optional
 from src.models.base_model import BaseLLM
-from src.models.mock_model import MockLLM
+from src.models.local_model import LocalLLM
+
+LOCAL_MODELS = {
+    "0.6b": "Qwen/Qwen3-0.6B",
+    "1.7b": "Qwen/Qwen3-1.7B",
+    "4b": "Qwen/Qwen3-4B",
+    "8b": "Qwen/Qwen3-8B",
+    "qwen3-0.6b": "Qwen/Qwen3-0.6B",
+    "qwen3-1.7b": "Qwen/Qwen3-1.7B",
+    "qwen3-4b": "Qwen/Qwen3-4B",
+    "qwen3-8b": "Qwen/Qwen3-8B",
+    "default": "Qwen/Qwen3-0.6B",
+}
 
 
 def get_model(
-    model_name: str = "mock",
-    backend: str = "auto",
+    model_name: str = "0.6b",
     device: Optional[str] = None,
     **kwargs,
 ) -> BaseLLM:
-    """Instantiate LLM runner based on backend and model name.
+    """Instantiate a locally downloaded LLM runner.
 
     Args:
-        model_name: Model identifier (e.g., 'meta-llama/Llama-3.2-1B-Instruct', 'mock')
-        backend: 'hf' (HuggingFace local), 'api' (OpenAI/vLLM), 'mock', or 'auto'
+        model_name: Model identifier or alias ('0.6b', '1.7b', '4b', '8b', or repo id)
+        device: 'mps', 'cuda', or 'cpu' (auto-detected if None)
     """
-    if backend == "mock" or model_name.lower().startswith("mock"):
-        return MockLLM(model_name=model_name, **kwargs)
+    clean_name = model_name.strip()
+    resolved_name = LOCAL_MODELS.get(clean_name.lower(), clean_name)
 
-    if backend == "api":
-        from src.models.api_model import APIModel
-        return APIModel(model_name=model_name, **kwargs)
-
-    # Hugging Face local
-    try:
-        from src.models.hf_model import HuggingFaceLLM
-        return HuggingFaceLLM(model_name=model_name, device=device, **kwargs)
-    except Exception as e:
-        if backend == "auto":
-            import logging
-            logging.warning(f"Could not load HuggingFace model '{model_name}': {e}. Falling back to MockLLM.")
-            return MockLLM(model_name="mock-fallback")
-        raise
+    return LocalLLM(model_name=resolved_name, device=device, **kwargs)

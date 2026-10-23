@@ -1,4 +1,8 @@
-"""AG News DataLoader for 4-class topic classification."""
+"""Yelp Polarity DataLoader for binary sentiment classification.
+
+Dataset: fancyzhx/yelp_polarity (~560k train / 38k test)
+Labels: 0 = negative, 1 = positive
+"""
 
 import logging
 from typing import List, Dict
@@ -11,52 +15,52 @@ from src.data.example import ICLExample
 logger = logging.getLogger(__name__)
 
 
-class AGNewsDataLoader(BaseDataLoader):
-    """DataLoader for AG News 4-class topic classification (short-to-medium inputs)."""
+class YelpPolarityDataLoader(BaseDataLoader):
+    """DataLoader for Yelp Polarity binary sentiment classification.
+
+    Much larger than SST-2 (~560k training reviews). Reviews are longer
+    (multi-sentence) which tests the model's ability to handle longer inputs.
+    """
 
     @property
     def dataset_name(self) -> str:
-        return "ag_news"
+        return "yelp_polarity"
 
     @property
     def classes(self) -> List[str]:
-        # 0: World, 1: Sports, 2: Business, 3: Sci/Tech
-        return ["World", "Sports", "Business", "Sci/Tech"]
+        # 1 = negative, 2 = positive in raw Yelp; remapped to 0/1
+        return ["negative", "positive"]
 
     @property
     def task_instruction(self) -> str:
         return (
-            "Classify the following news article into one of the four categories: "
-            "World, Sports, Business, or Sci/Tech."
+            "Classify the sentiment of the following Yelp review as either "
+            "'positive' or 'negative'."
         )
 
     @property
     def default_input_prefix(self) -> str:
-        return "Article: "
+        return "Review: "
 
     @property
     def default_label_prefix(self) -> str:
-        return "Topic: "
+        return "Sentiment: "
 
     def _fetch_raw_splits(self) -> Dict[str, List[ICLExample]]:
-        """Fetch AG News dataset from Hugging Face Hub ('fancyzhx/ag_news' or 'SetFit/ag_news')."""
-        logger.info("Loading AG News from Hugging Face ('fancyzhx/ag_news')...")
-        try:
-            hf_dataset = load_dataset("fancyzhx/ag_news")
-        except Exception:
-            logger.info("Falling back to 'SetFit/ag_news'...")
-            hf_dataset = load_dataset("SetFit/ag_news")
+        """Fetch Yelp Polarity from Hugging Face Hub ('fancyzhx/yelp_polarity')."""
+        logger.info("Loading Yelp Polarity from Hugging Face ('fancyzhx/yelp_polarity')...")
+        hf_dataset = load_dataset("fancyzhx/yelp_polarity")
 
         splits: Dict[str, List[ICLExample]] = {}
 
-        # Process test split
+        # Process test split (38,000 examples — we will subsample at eval time)
         test_examples = []
         for idx, item in enumerate(hf_dataset["test"]):
             text = item.get("text", "").strip()
-            label = int(item["label"])
+            label = int(item["label"])  # 0 = negative, 1 = positive
             test_examples.append(
                 ICLExample(
-                    id=f"ag_news_test_{idx}",
+                    id=f"yelp_test_{idx}",
                     dataset=self.dataset_name,
                     text=text,
                     label=label,
@@ -66,11 +70,24 @@ class AGNewsDataLoader(BaseDataLoader):
             )
         splits["test"] = test_examples
 
-        # Process train split: create held-out validation split (10% of train, max 5000)
+        # Process train split: subsample 20k for reasonable memory use,
+        # then carve out 10% as validation
         train_raw = list(hf_dataset["train"])
+
+        # Subsample to 20k to keep processing fast (stratified)
+        MAX_TRAIN = 20_000
+        if len(train_raw) > MAX_TRAIN:
+            subsample_indices, _ = train_test_split(
+                range(len(train_raw)),
+                train_size=MAX_TRAIN,
+                random_state=self.seed,
+                stratify=[x["label"] for x in train_raw],
+            )
+            train_raw = [train_raw[i] for i in sorted(subsample_indices)]
+
         train_indices, val_indices = train_test_split(
             range(len(train_raw)),
-            test_size=min(5000, int(len(train_raw) * 0.1)),
+            test_size=min(2000, int(len(train_raw) * 0.1)),
             random_state=self.seed,
             stratify=[x["label"] for x in train_raw],
         )
@@ -82,7 +99,7 @@ class AGNewsDataLoader(BaseDataLoader):
             label = int(item["label"])
             train_examples.append(
                 ICLExample(
-                    id=f"ag_news_train_{idx}",
+                    id=f"yelp_train_{idx}",
                     dataset=self.dataset_name,
                     text=text,
                     label=label,
@@ -99,7 +116,7 @@ class AGNewsDataLoader(BaseDataLoader):
             label = int(item["label"])
             val_examples.append(
                 ICLExample(
-                    id=f"ag_news_val_{idx}",
+                    id=f"yelp_val_{idx}",
                     dataset=self.dataset_name,
                     text=text,
                     label=label,
@@ -110,7 +127,7 @@ class AGNewsDataLoader(BaseDataLoader):
         splits["validation"] = val_examples
 
         logger.info(
-            f"Loaded AG News: train={len(splits['train'])}, "
+            f"Loaded Yelp Polarity: train={len(splits['train'])}, "
             f"validation={len(splits['validation'])}, test={len(splits['test'])}"
         )
         return splits
