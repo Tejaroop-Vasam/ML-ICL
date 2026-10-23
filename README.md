@@ -197,7 +197,7 @@ ML-ICL/
 │   ├── cache/                  # Computed sentence embeddings (.npy)
 │   └── processed/              # Formatted JSONL and .npz partitions
 ├── scripts/                    # Standalone utility & preparation scripts
-│   ├── download_models.py      # Downloads Qwen3 models locally via HuggingFace Hub
+│   ├── run_all_experiments.py  # Orchestrates full benchmark suite across models/datasets
 │   ├── export_to_npz.py        # Converts processed datasets to NumPy archives
 │   └── token_profiler.py       # Profiles token & word distributions across benchmarks
 ├── src/

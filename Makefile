@@ -1,11 +1,11 @@
 PYTHON := .venv/bin/python
 
-.PHONY: help install models npz profile test exp1 exp2 exp4 exp5 proposed plot clean
+.PHONY: help install run_all npz profile test exp1 exp2 exp4 exp5 proposed plot clean
 
 help:
 	@echo "Available commands (similar to npm scripts):"
 	@echo "  make install     - Install all required Python packages into .venv"
-	@echo "  make models      - Download Qwen3 models locally via Hugging Face Hub"
+	@echo "  make run_all     - Run all experiments across models and datasets"
 	@echo "  make npz         - Convert and cache all datasets into compressed NumPy .npz"
 	@echo "  make profile     - Profile sequence length and word counts across datasets"
 	@echo "  make test        - Run the complete unit test suite"
@@ -19,9 +19,6 @@ help:
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
-
-models:
-	$(PYTHON) scripts/download_models.py
 
 run_all:
 	$(PYTHON) scripts/run_all_experiments.py --models 0.6b 1.7b --datasets yelp_polarity yahoo_answers trec --n_eval 30 --k 4

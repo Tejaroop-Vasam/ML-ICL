@@ -1,4 +1,4 @@
-"""Local model registry and factory."""
+"""Hugging Face Hub model registry and factory."""
 
 from typing import Optional
 from src.models.base_model import BaseLLM
@@ -22,7 +22,7 @@ def get_model(
     device: Optional[str] = None,
     **kwargs,
 ) -> BaseLLM:
-    """Instantiate a locally downloaded LLM runner.
+    """Instantiate an LLM runner loaded directly from Hugging Face Hub.
 
     Args:
         model_name: Model identifier or alias ('0.6b', '1.7b', '4b', '8b', or repo id)

@@ -1,4 +1,4 @@
-"""Local causal LM runner for downloaded local models (Apple Silicon MPS / CUDA / CPU)."""
+"""Causal LM runner loaded dynamically from Hugging Face Hub (Apple Silicon MPS / CUDA / CPU)."""
 
 import logging
 from typing import Optional
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class LocalLLM(BaseLLM):
-    """Local model runner for downloaded Qwen3 models."""
+    """Model runner loading directly from Hugging Face Hub on the fly."""
 
     def __init__(
         self,
@@ -32,19 +32,20 @@ class LocalLLM(BaseLLM):
             self.device = device
 
         if dtype is None:
-            dtype = torch.float16 if self.device == "mps" else torch.float32
+            # float16 on any GPU (MPS or CUDA) for speed and memory efficiency
+            dtype = torch.float16 if self.device in ("mps", "cuda") else torch.float32
 
-        logger.info(f"Loading local model '{model_name}' on device '{self.device}'...")
+        logger.info(f"Loading '{model_name}' on device '{self.device}'...")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            dtype=dtype,
+            torch_dtype=dtype,
+            device_map="auto",   # HF automatically places layers on GPU/CPU as needed
         )
-        if self.device != "cpu":
-            self.model = self.model.to(self.device)
+        # device_map="auto" handles placement — no manual .to(device) needed
 
         self.model.eval()
         logger.info(f"Successfully loaded '{model_name}'.")

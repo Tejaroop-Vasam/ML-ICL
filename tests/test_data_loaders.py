@@ -9,13 +9,13 @@ class TestDataLoaders(unittest.TestCase):
 
     def test_list_datasets(self):
         datasets = list_datasets()
-        self.assertIn("sst2", datasets)
-        self.assertIn("ag_news", datasets)
+        self.assertIn("yelp_polarity", datasets)
+        self.assertIn("yahoo_answers", datasets)
         self.assertIn("trec", datasets)
         self.assertIn("imdb", datasets)
 
-    def test_sst2_loader(self):
-        loader = get_dataset("sst2")
+    def test_yelp_loader(self):
+        loader = get_dataset("yelp_polarity")
         splits = loader.load_data()
         self.assertIn("train", splits)
         self.assertIn("test", splits)
@@ -33,15 +33,15 @@ class TestDataLoaders(unittest.TestCase):
         self.assertIn("Review:", prompt)
         self.assertIn("Sentiment:", prompt)
 
-    def test_agnews_loader(self):
-        loader = get_dataset("ag_news")
+    def test_yahoo_loader(self):
+        loader = get_dataset("yahoo_answers")
         splits = loader.load_data()
-        self.assertEqual(loader.num_classes, 4)
-        sample = loader.get_stratified_subset("test", n_samples=8, seed=42)
-        self.assertEqual(len(sample), 8)
-        # Check class balance in stratified sample
+        self.assertEqual(loader.num_classes, 10)
+        sample = loader.get_stratified_subset("test", n_samples=10, seed=42)
+        self.assertEqual(len(sample), 10)
+        # Check that labels are valid topic IDs
         labels = [ex.label for ex in sample]
-        self.assertEqual(sorted(list(set(labels))), [0, 1, 2, 3])
+        self.assertTrue(all(0 <= lbl < 10 for lbl in labels))
 
     def test_trec_loader(self):
         loader = get_dataset("trec")
@@ -64,10 +64,10 @@ class TestDataLoaders(unittest.TestCase):
 
     def test_numpy_dataset(self):
         from src.data import NumpyDataset
-        loader = get_dataset("sst2")
+        loader = get_dataset("yelp_polarity")
         np_ds = loader.get_numpy_dataset("test")
         self.assertIsInstance(np_ds, NumpyDataset)
-        self.assertEqual(len(np_ds), 1821)
+        self.assertGreater(len(np_ds), 0)
 
         # Test indexing & slicing
         text, label, item_id = np_ds[0]

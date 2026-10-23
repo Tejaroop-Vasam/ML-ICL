@@ -1,4 +1,4 @@
-"""Local LLM runner and model registry."""
+"""Hugging Face Hub LLM runner and model registry."""
 
 from src.models.base_model import BaseLLM
 from src.models.local_model import LocalLLM
