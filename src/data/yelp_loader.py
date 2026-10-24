@@ -53,9 +53,14 @@ class YelpPolarityDataLoader(BaseDataLoader):
 
         splits: Dict[str, List[ICLExample]] = {}
 
-        # Process test split (38,000 examples — we will subsample at eval time)
+        # Process test split (capped at 5,000 for fast loading/caching; ample for n_eval<=1000)
+        MAX_TEST = 5_000
+        test_ds = hf_dataset["test"]
+        if len(test_ds) > MAX_TEST:
+            test_ds = test_ds.shuffle(seed=self.seed).select(range(MAX_TEST))
+
         test_examples = []
-        for idx, item in enumerate(hf_dataset["test"]):
+        for idx, item in enumerate(test_ds):
             text = item.get("text", "").strip()
             label = int(item["label"])  # 0 = negative, 1 = positive
             test_examples.append(
@@ -70,31 +75,21 @@ class YelpPolarityDataLoader(BaseDataLoader):
             )
         splits["test"] = test_examples
 
-        # Process train split: subsample 20k for reasonable memory use,
-        # then carve out 10% as validation
-        train_raw = list(hf_dataset["train"])
-
-        # Subsample to 20k to keep processing fast (stratified)
+        # Process train split: select 20k directly using Hugging Face dataset indexing
+        # without converting 560,000 examples to a Python list (avoids OOM and RAM thrashing)
         MAX_TRAIN = 20_000
-        if len(train_raw) > MAX_TRAIN:
-            subsample_indices, _ = train_test_split(
-                range(len(train_raw)),
-                train_size=MAX_TRAIN,
-                random_state=self.seed,
-                stratify=[x["label"] for x in train_raw],
-            )
-            train_raw = [train_raw[i] for i in sorted(subsample_indices)]
+        train_ds = hf_dataset["train"]
+        if len(train_ds) > MAX_TRAIN:
+            train_sub = train_ds.shuffle(seed=self.seed).select(range(MAX_TRAIN))
+        else:
+            train_sub = train_ds
 
-        train_indices, val_indices = train_test_split(
-            range(len(train_raw)),
-            test_size=min(2000, int(len(train_raw) * 0.1)),
-            random_state=self.seed,
-            stratify=[x["label"] for x in train_raw],
-        )
+        val_size = min(2000, int(len(train_sub) * 0.1))
+        train_size = len(train_sub) - val_size
 
         train_examples = []
-        for idx in train_indices:
-            item = train_raw[idx]
+        for idx in range(train_size):
+            item = train_sub[idx]
             text = item.get("text", "").strip()
             label = int(item["label"])
             train_examples.append(
@@ -110,13 +105,13 @@ class YelpPolarityDataLoader(BaseDataLoader):
         splits["train"] = train_examples
 
         val_examples = []
-        for idx in val_indices:
-            item = train_raw[idx]
+        for idx in range(train_size, len(train_sub)):
+            item = train_sub[idx]
             text = item.get("text", "").strip()
             label = int(item["label"])
             val_examples.append(
                 ICLExample(
-                    id=f"yelp_val_{idx}",
+                    id=f"yelp_val_{idx - train_size}",
                     dataset=self.dataset_name,
                     text=text,
                     label=label,

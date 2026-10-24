@@ -13,6 +13,10 @@ import numpy as np
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# Mask broken/mismatched optional vision and audio packages on Kaggle/Colab
+for _mod in ("torchvision", "torchaudio"):
+    sys.modules[_mod] = None
+
 from src.data import get_dataset, list_datasets
 from src.selection import (
     RandomSelector,

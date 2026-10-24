@@ -1,7 +1,12 @@
-"""Causal LM runner loaded dynamically from Hugging Face Hub (Apple Silicon MPS / CUDA / CPU)."""
-
+import sys
 import logging
 from typing import Optional
+
+# Prevent broken optional vision/audio packages (common CUDA/ABI mismatch in Kaggle/Colab)
+# from crashing transformers in purely text-based NLP pipelines.
+for _mod in ("torchvision", "torchaudio"):
+    sys.modules[_mod] = None
+
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
@@ -42,7 +47,7 @@ class LocalLLM(BaseLLM):
 
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=dtype,
+            dtype=dtype,
             device_map="auto",   # HF automatically places layers on GPU/CPU as needed
         )
         # device_map="auto" handles placement — no manual .to(device) needed

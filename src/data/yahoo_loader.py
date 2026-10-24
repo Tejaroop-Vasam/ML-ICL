@@ -83,9 +83,14 @@ class YahooAnswersDataLoader(BaseDataLoader):
                 parts.append(f"Answer: {answer}")
             return " ".join(parts)
 
-        # Process test split (60,000 examples — subsampled at eval time)
+        # Process test split (capped at 5,000 for fast loading/caching; ample for n_eval<=1000)
+        MAX_TEST = 5_000
+        test_ds = hf_dataset["test"]
+        if len(test_ds) > MAX_TEST:
+            test_ds = test_ds.shuffle(seed=self.seed).select(range(MAX_TEST))
+
         test_examples = []
-        for idx, item in enumerate(hf_dataset["test"]):
+        for idx, item in enumerate(test_ds):
             text = build_text(item).strip()
             label = int(item["topic"])
             if label < 0 or label >= len(YAHOO_CLASSES):
@@ -102,29 +107,21 @@ class YahooAnswersDataLoader(BaseDataLoader):
             )
         splits["test"] = test_examples
 
-        # Train split: subsample to 20k (stratified) then 10% validation
-        train_raw = list(hf_dataset["train"])
-
+        # Process train split: select 20k directly using Hugging Face dataset indexing
+        # without converting 1,400,000 examples to a Python list (avoids OOM and RAM thrashing)
         MAX_TRAIN = 20_000
-        if len(train_raw) > MAX_TRAIN:
-            subsample_indices, _ = train_test_split(
-                range(len(train_raw)),
-                train_size=MAX_TRAIN,
-                random_state=self.seed,
-                stratify=[x["topic"] for x in train_raw],
-            )
-            train_raw = [train_raw[i] for i in sorted(subsample_indices)]
+        train_ds = hf_dataset["train"]
+        if len(train_ds) > MAX_TRAIN:
+            train_sub = train_ds.shuffle(seed=self.seed).select(range(MAX_TRAIN))
+        else:
+            train_sub = train_ds
 
-        train_indices, val_indices = train_test_split(
-            range(len(train_raw)),
-            test_size=min(2000, int(len(train_raw) * 0.1)),
-            random_state=self.seed,
-            stratify=[x["topic"] for x in train_raw],
-        )
+        val_size = min(2000, int(len(train_sub) * 0.1))
+        train_size = len(train_sub) - val_size
 
         train_examples = []
-        for idx in train_indices:
-            item = train_raw[idx]
+        for idx in range(train_size):
+            item = train_sub[idx]
             text = build_text(item).strip()
             label = int(item["topic"])
             if label < 0 or label >= len(YAHOO_CLASSES):
@@ -142,15 +139,15 @@ class YahooAnswersDataLoader(BaseDataLoader):
         splits["train"] = train_examples
 
         val_examples = []
-        for idx in val_indices:
-            item = train_raw[idx]
+        for idx in range(train_size, len(train_sub)):
+            item = train_sub[idx]
             text = build_text(item).strip()
             label = int(item["topic"])
             if label < 0 or label >= len(YAHOO_CLASSES):
                 continue
             val_examples.append(
                 ICLExample(
-                    id=f"yahoo_val_{idx}",
+                    id=f"yahoo_val_{idx - train_size}",
                     dataset=self.dataset_name,
                     text=text,
                     label=label,

@@ -25,6 +25,10 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# Mask broken/mismatched optional vision and audio packages on Kaggle/Colab
+for _mod in ("torchvision", "torchaudio"):
+    sys.modules[_mod] = None
+
 from src.data import get_dataset
 from src.models import get_model
 from src.evaluation import ICLEvaluator
@@ -284,6 +288,16 @@ def main():
     figures_dir = out_dir / "figures"
 
     if not args.plot_only:
+        import torch
+        if torch.cuda.is_available():
+            device_name = torch.cuda.get_device_name(0)
+            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            logger.info(f"🚀 [HARDWARE] CUDA GPU Active: {device_name} ({vram_gb:.1f} GB VRAM)")
+        elif torch.backends.mps.is_available():
+            logger.info("🍏 [HARDWARE] Apple Silicon MPS Active")
+        else:
+            logger.warning("⚠️  [HARDWARE WARNING] No GPU detected! Running on CPU will be extremely slow.")
+
         for model_name in args.models:
             logger.info(f"\n{'#'*70}")
             logger.info(f"# MODEL: {model_name}")

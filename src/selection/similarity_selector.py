@@ -28,12 +28,18 @@ class SimilaritySelector(BaseSelector):
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self._model = None
         self._candidate_embeddings: Optional[np.ndarray] = None
+        self._query_cache: dict = {}
 
     def _get_model(self):
         if self._model is None:
             from sentence_transformers import SentenceTransformer
             import torch
-            device = "mps" if torch.backends.mps.is_available() else "cpu"
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
             logger.info(f"Loading SentenceTransformer '{self.model_name}' on device '{device}'...")
             self._model = SentenceTransformer(self.model_name, device=device)
         return self._model
@@ -96,12 +102,16 @@ class SimilaritySelector(BaseSelector):
         if k <= 0 or not self.candidate_pool:
             return []
 
-        model = self._get_model()
-        query_emb = model.encode(
-            [test_example.text],
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-        )[0]
+        if test_example.id in self._query_cache:
+            query_emb = self._query_cache[test_example.id]
+        else:
+            model = self._get_model()
+            query_emb = model.encode(
+                [test_example.text],
+                normalize_embeddings=True,
+                convert_to_numpy=True,
+            )[0]
+            self._query_cache[test_example.id] = query_emb
 
         candidate_embs = self.get_candidate_embeddings()
         # Cosine similarity is simple dot product since vectors are L2-normalized
