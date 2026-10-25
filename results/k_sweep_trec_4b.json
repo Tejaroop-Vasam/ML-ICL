@@ -1,0 +1,51 @@
+{
+  "experiment": "exp2_k_sweep",
+  "dataset": "trec",
+  "model": "4b",
+  "results": {
+    "Random": {
+      "0": {
+        "accuracy": 0.43333333333333335,
+        "macro_f1": 0.38425925925925924,
+        "mean_prompt_tokens": 42.03333333333333
+      },
+      "2": {
+        "accuracy": 0.7,
+        "macro_f1": 0.7130952380952381,
+        "mean_prompt_tokens": 77.1
+      },
+      "4": {
+        "accuracy": 0.7666666666666667,
+        "macro_f1": 0.7626262626262627,
+        "mean_prompt_tokens": 111.7
+      },
+      "8": {
+        "accuracy": 0.7666666666666667,
+        "macro_f1": 0.7747345247345248,
+        "mean_prompt_tokens": 180.93333333333334
+      }
+    },
+    "Similarity-kNN": {
+      "0": {
+        "accuracy": 0.43333333333333335,
+        "macro_f1": 0.38425925925925924,
+        "mean_prompt_tokens": 42.03333333333333
+      },
+      "2": {
+        "accuracy": 0.8,
+        "macro_f1": 0.8026936026936027,
+        "mean_prompt_tokens": 76.3
+      },
+      "4": {
+        "accuracy": 0.8333333333333334,
+        "macro_f1": 0.8423789173789173,
+        "mean_prompt_tokens": 109.2
+      },
+      "8": {
+        "accuracy": 0.8,
+        "macro_f1": 0.8092592592592592,
+        "mean_prompt_tokens": 174.5
+      }
+    }
+  }
+}

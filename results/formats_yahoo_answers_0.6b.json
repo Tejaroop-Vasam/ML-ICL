@@ -1,0 +1,22 @@
+{
+  "experiment": "exp5_formatting",
+  "dataset": "yahoo_answers",
+  "model": "0.6b",
+  "results": {
+    "plain": {
+      "accuracy": 0.4666666666666667,
+      "macro_f1": 0.43880952380952387,
+      "mean_tokens": 732.1
+    },
+    "structured": {
+      "accuracy": 0.5,
+      "macro_f1": 0.46357142857142863,
+      "mean_tokens": 742.1
+    },
+    "rationale": {
+      "accuracy": 0.5,
+      "macro_f1": 0.46357142857142863,
+      "mean_tokens": 742.1
+    }
+  }
+}

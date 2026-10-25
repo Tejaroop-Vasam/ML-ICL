@@ -1,0 +1,25 @@
+{
+  "experiment": "exp1_baselines",
+  "dataset": "yelp_polarity",
+  "model": "0.6b",
+  "results": {
+    "Zero-Shot": {
+      "accuracy_mean": 0.6,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.5833333333333333,
+      "macro_f1_std": 0.0
+    },
+    "Random": {
+      "accuracy_mean": 0.9,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.898989898989899,
+      "macro_f1_std": 0.0
+    },
+    "Similarity-kNN": {
+      "accuracy_mean": 1.0,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 1.0,
+      "macro_f1_std": 0.0
+    }
+  }
+}

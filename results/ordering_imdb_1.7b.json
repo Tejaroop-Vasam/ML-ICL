@@ -1,0 +1,22 @@
+{
+  "experiment": "exp4_ordering",
+  "dataset": "imdb",
+  "model": "1.7b",
+  "results": {
+    "similar_last": {
+      "accuracy": 0.9666666666666667,
+      "macro_f1": 0.9666295884315907,
+      "mean_tokens": 1410.9666666666667
+    },
+    "similar_first": {
+      "accuracy": 0.9,
+      "macro_f1": 0.899888765294772,
+      "mean_tokens": 1410.9666666666667
+    },
+    "random": {
+      "accuracy": 0.9,
+      "macro_f1": 0.899888765294772,
+      "mean_tokens": 1410.9666666666667
+    }
+  }
+}

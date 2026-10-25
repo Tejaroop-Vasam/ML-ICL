@@ -1,0 +1,22 @@
+{
+  "experiment": "exp5_formatting",
+  "dataset": "imdb",
+  "model": "4b",
+  "results": {
+    "plain": {
+      "accuracy": 0.9333333333333333,
+      "macro_f1": 0.9333333333333333,
+      "mean_tokens": 1410.9666666666667
+    },
+    "structured": {
+      "accuracy": 0.9,
+      "macro_f1": 0.899888765294772,
+      "mean_tokens": 1415.9666666666667
+    },
+    "rationale": {
+      "accuracy": 0.9,
+      "macro_f1": 0.899888765294772,
+      "mean_tokens": 1415.9666666666667
+    }
+  }
+}

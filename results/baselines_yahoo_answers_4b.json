@@ -1,0 +1,25 @@
+{
+  "experiment": "exp1_baselines",
+  "dataset": "yahoo_answers",
+  "model": "4b",
+  "results": {
+    "Zero-Shot": {
+      "accuracy_mean": 0.4666666666666667,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.4685714285714286,
+      "macro_f1_std": 0.0
+    },
+    "Random": {
+      "accuracy_mean": 0.7,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.6647619047619047,
+      "macro_f1_std": 0.0
+    },
+    "Similarity-kNN": {
+      "accuracy_mean": 0.6333333333333333,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.5640476190476191,
+      "macro_f1_std": 0.0
+    }
+  }
+}

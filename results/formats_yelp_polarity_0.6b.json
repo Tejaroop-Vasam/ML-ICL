@@ -1,0 +1,22 @@
+{
+  "experiment": "exp5_formatting",
+  "dataset": "yelp_polarity",
+  "model": "0.6b",
+  "results": {
+    "plain": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0,
+      "mean_tokens": 1090.6
+    },
+    "structured": {
+      "accuracy": 0.9666666666666667,
+      "macro_f1": 0.9666295884315907,
+      "mean_tokens": 1095.6
+    },
+    "rationale": {
+      "accuracy": 0.9666666666666667,
+      "macro_f1": 0.9666295884315907,
+      "mean_tokens": 1095.6
+    }
+  }
+}

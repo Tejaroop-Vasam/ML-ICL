@@ -18,7 +18,7 @@ data/raw/
 *.safetensors
 
 # Logs & Results
-results/
+# results/
 logs/
 .system_generated/
 .DS_Store

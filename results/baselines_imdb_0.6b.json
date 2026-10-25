@@ -1,0 +1,25 @@
+{
+  "experiment": "exp1_baselines",
+  "dataset": "imdb",
+  "model": "0.6b",
+  "results": {
+    "Zero-Shot": {
+      "accuracy_mean": 0.6666666666666666,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.6651785714285714,
+      "macro_f1_std": 0.0
+    },
+    "Random": {
+      "accuracy_mean": 0.8,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.7963800904977376,
+      "macro_f1_std": 0.0
+    },
+    "Similarity-kNN": {
+      "accuracy_mean": 0.7666666666666667,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.76,
+      "macro_f1_std": 0.0
+    }
+  }
+}

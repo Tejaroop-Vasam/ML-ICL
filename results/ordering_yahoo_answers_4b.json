@@ -1,0 +1,22 @@
+{
+  "experiment": "exp4_ordering",
+  "dataset": "yahoo_answers",
+  "model": "4b",
+  "results": {
+    "similar_last": {
+      "accuracy": 0.6333333333333333,
+      "macro_f1": 0.5640476190476191,
+      "mean_tokens": 732.1
+    },
+    "similar_first": {
+      "accuracy": 0.7,
+      "macro_f1": 0.6573809523809524,
+      "mean_tokens": 732.1
+    },
+    "random": {
+      "accuracy": 0.7,
+      "macro_f1": 0.6585714285714286,
+      "mean_tokens": 732.1
+    }
+  }
+}

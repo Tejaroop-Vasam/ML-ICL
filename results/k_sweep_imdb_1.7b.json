@@ -1,0 +1,51 @@
+{
+  "experiment": "exp2_k_sweep",
+  "dataset": "imdb",
+  "model": "1.7b",
+  "results": {
+    "Random": {
+      "0": {
+        "accuracy": 0.7333333333333333,
+        "macro_f1": 0.7222222222222222,
+        "mean_prompt_tokens": 309.93333333333334
+      },
+      "2": {
+        "accuracy": 0.9,
+        "macro_f1": 0.899888765294772,
+        "mean_prompt_tokens": 934.4666666666667
+      },
+      "4": {
+        "accuracy": 0.9,
+        "macro_f1": 0.899888765294772,
+        "mean_prompt_tokens": 1541.4666666666667
+      },
+      "8": {
+        "accuracy": 0.8666666666666667,
+        "macro_f1": 0.8660714285714286,
+        "mean_prompt_tokens": 2734.6666666666665
+      }
+    },
+    "Similarity-kNN": {
+      "0": {
+        "accuracy": 0.7333333333333333,
+        "macro_f1": 0.7222222222222222,
+        "mean_prompt_tokens": 309.93333333333334
+      },
+      "2": {
+        "accuracy": 0.9,
+        "macro_f1": 0.899888765294772,
+        "mean_prompt_tokens": 895.1
+      },
+      "4": {
+        "accuracy": 0.9666666666666667,
+        "macro_f1": 0.9666295884315907,
+        "mean_prompt_tokens": 1410.9666666666667
+      },
+      "8": {
+        "accuracy": 0.9,
+        "macro_f1": 0.898989898989899,
+        "mean_prompt_tokens": 2538.4666666666667
+      }
+    }
+  }
+}

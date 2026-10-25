@@ -1,0 +1,51 @@
+{
+  "experiment": "exp2_k_sweep",
+  "dataset": "yahoo_answers",
+  "model": "0.6b",
+  "results": {
+    "Random": {
+      "0": {
+        "accuracy": 0.1,
+        "macro_f1": 0.04236453201970443,
+        "mean_prompt_tokens": 181.63333333333333
+      },
+      "2": {
+        "accuracy": 0.36666666666666664,
+        "macro_f1": 0.3319047619047619,
+        "mean_prompt_tokens": 436.03333333333336
+      },
+      "4": {
+        "accuracy": 0.3,
+        "macro_f1": 0.25277777777777777,
+        "mean_prompt_tokens": 689.0666666666667
+      },
+      "8": {
+        "accuracy": 0.3333333333333333,
+        "macro_f1": 0.3249206349206349,
+        "mean_prompt_tokens": 1143.4666666666667
+      }
+    },
+    "Similarity-kNN": {
+      "0": {
+        "accuracy": 0.1,
+        "macro_f1": 0.04236453201970443,
+        "mean_prompt_tokens": 181.63333333333333
+      },
+      "2": {
+        "accuracy": 0.5,
+        "macro_f1": 0.45619047619047615,
+        "mean_prompt_tokens": 461.93333333333334
+      },
+      "4": {
+        "accuracy": 0.4666666666666667,
+        "macro_f1": 0.43880952380952387,
+        "mean_prompt_tokens": 732.1
+      },
+      "8": {
+        "accuracy": 0.5333333333333333,
+        "macro_f1": 0.4916666666666667,
+        "mean_prompt_tokens": 1309.4
+      }
+    }
+  }
+}

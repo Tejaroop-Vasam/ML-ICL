@@ -1,0 +1,22 @@
+{
+  "experiment": "exp4_ordering",
+  "dataset": "trec",
+  "model": "0.6b",
+  "results": {
+    "similar_last": {
+      "accuracy": 0.6333333333333333,
+      "macro_f1": 0.5879629629629629,
+      "mean_tokens": 109.2
+    },
+    "similar_first": {
+      "accuracy": 0.6666666666666666,
+      "macro_f1": 0.6388047138047137,
+      "mean_tokens": 109.2
+    },
+    "random": {
+      "accuracy": 0.7333333333333333,
+      "macro_f1": 0.7175925925925926,
+      "mean_tokens": 109.2
+    }
+  }
+}

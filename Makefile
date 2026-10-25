@@ -6,11 +6,15 @@ DATASETS ?= yelp_polarity yahoo_answers trec
 N_EVAL   ?= 30
 K        ?= 4
 
-.PHONY: help install run_all run_all_models npz profile test exp1 exp2 exp4 exp5 proposed plot clean
+.PHONY: help install run_all run_all_models run_0.6b run_1.7b run_4b run_8b npz profile test exp1 exp2 exp4 exp5 proposed plot clean
 
 help:
 	@echo "Available commands:"
 	@echo "  make install         - Install all required Python packages"
+	@echo "  make run_0.6b        - Run all experiments on Qwen3-0.6B"
+	@echo "  make run_1.7b        - Run all experiments on Qwen3-1.7B"
+	@echo "  make run_4b          - Run all experiments on Qwen3-4B"
+	@echo "  make run_8b          - Run all experiments on Qwen3-8B"
 	@echo "  make run_all         - Run experiments on default models (0.6b, 1.7b) and datasets"
 	@echo "  make run_all_models  - Run ALL experiments on ALL models (0.6b, 1.7b, 4b, 8b) and ALL datasets"
 	@echo "                         Usage: make run_all_models N_EVAL=30 K=4"
@@ -33,6 +37,19 @@ run_all:
 
 run_all_models:
 	$(PYTHON) scripts/run_all_experiments.py --models 0.6b 1.7b 4b 8b --datasets yelp_polarity yahoo_answers trec imdb --n_eval $(N_EVAL) --k $(K)
+
+# Model-by-model targets
+run_0.6b:
+	$(PYTHON) scripts/run_all_experiments.py --models 0.6b --datasets $(DATASETS) --n_eval $(N_EVAL) --k $(K)
+
+run_1.7b:
+	$(PYTHON) scripts/run_all_experiments.py --models 1.7b --datasets $(DATASETS) --n_eval $(N_EVAL) --k $(K)
+
+run_4b:
+	$(PYTHON) scripts/run_all_experiments.py --models 4b --datasets $(DATASETS) --n_eval $(N_EVAL) --k $(K)
+
+run_8b:
+	$(PYTHON) scripts/run_all_experiments.py --models 8b --datasets $(DATASETS) --n_eval $(N_EVAL) --k $(K)
 
 npz:
 	$(PYTHON) scripts/export_to_npz.py
@@ -59,7 +76,8 @@ proposed:
 	$(PYTHON) experiments/run_experiment.py --experiment proposed_method --dataset imdb --token_budget 1500 --k 4 --n_eval 100
 
 plot:
-	$(PYTHON) src/visualization/plot_results.py --results_dir results --output_dir results/figures
+	$(PYTHON) scripts/run_all_experiments.py --plot_only
+	$(PYTHON) scripts/plot_summary.py
 
 clean:
 	rm -rf data/cache/embeddings/*.npy

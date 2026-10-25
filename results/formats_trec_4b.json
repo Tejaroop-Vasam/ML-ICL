@@ -1,0 +1,22 @@
+{
+  "experiment": "exp5_formatting",
+  "dataset": "trec",
+  "model": "4b",
+  "results": {
+    "plain": {
+      "accuracy": 0.8333333333333334,
+      "macro_f1": 0.8423789173789173,
+      "mean_tokens": 109.2
+    },
+    "structured": {
+      "accuracy": 0.8,
+      "macro_f1": 0.8057239057239056,
+      "mean_tokens": 119.2
+    },
+    "rationale": {
+      "accuracy": 0.8,
+      "macro_f1": 0.8057239057239056,
+      "mean_tokens": 119.2
+    }
+  }
+}

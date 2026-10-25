@@ -1,0 +1,22 @@
+{
+  "experiment": "exp4_ordering",
+  "dataset": "yelp_polarity",
+  "model": "4b",
+  "results": {
+    "similar_last": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0,
+      "mean_tokens": 1090.6
+    },
+    "similar_first": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0,
+      "mean_tokens": 1090.6
+    },
+    "random": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0,
+      "mean_tokens": 1090.6
+    }
+  }
+}
