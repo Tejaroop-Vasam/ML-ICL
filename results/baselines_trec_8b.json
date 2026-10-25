@@ -1,0 +1,25 @@
+{
+  "experiment": "exp1_baselines",
+  "dataset": "trec",
+  "model": "8b",
+  "results": {
+    "Zero-Shot": {
+      "accuracy_mean": 0.7666666666666667,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.769107744107744,
+      "macro_f1_std": 0.0
+    },
+    "Random": {
+      "accuracy_mean": 0.7666666666666667,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.7653198653198653,
+      "macro_f1_std": 0.0
+    },
+    "Similarity-kNN": {
+      "accuracy_mean": 0.8333333333333334,
+      "accuracy_std": 0.0,
+      "macro_f1_mean": 0.8390572390572392,
+      "macro_f1_std": 0.0
+    }
+  }
+}
