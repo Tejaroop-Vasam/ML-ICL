@@ -66,14 +66,19 @@ def save_json(data: dict, path: Path):
 
 # ─── Experiment Runners ────────────────────────────────────────────────────────
 
-def run_baselines(model_name, dataset, n_eval, k, seeds, out_dir):
+def run_baselines(llm, model_name, dataset, n_eval, k, seeds, out_dir):
     """Zero-Shot vs Random vs Similarity across seeds."""
+    out_file = out_dir / f"baselines_{dataset}_{model_name}.json"
+    if out_file.exists():
+        logger.info(f"[SKIPPED] {out_file.name} already exists.")
+        with open(out_file) as f:
+            return json.load(f).get("results", {})
+
     logger.info(f"\n{'='*60}")
     logger.info(f"[BASELINES] model={model_name} dataset={dataset} k={k}")
     logger.info(f"{'='*60}")
 
     loader = get_dataset(dataset)
-    llm    = get_model(model_name)
     ev     = ICLEvaluator(loader, llm)
     pool   = loader.get_candidate_demonstration_pool(pool_size=200, seed=42)
 
@@ -98,16 +103,21 @@ def run_baselines(model_name, dataset, n_eval, k, seeds, out_dir):
         }
 
     save_json({"experiment": "exp1_baselines", "dataset": dataset, "model": model_name, "results": results},
-              out_dir / f"baselines_{dataset}_{model_name}.json")
+              out_file)
     return results
 
 
-def run_format_study(model_name, dataset, n_eval, k, out_dir):
+def run_format_study(llm, model_name, dataset, n_eval, k, out_dir):
     """Compare plain vs structured vs rationale prompt formats."""
+    out_file = out_dir / f"formats_{dataset}_{model_name}.json"
+    if out_file.exists():
+        logger.info(f"[SKIPPED] {out_file.name} already exists.")
+        with open(out_file) as f:
+            return json.load(f).get("results", {})
+
     logger.info(f"\n[FORMATS] model={model_name} dataset={dataset} k={k}")
 
     loader = get_dataset(dataset)
-    llm    = get_model(model_name)
     ev     = ICLEvaluator(loader, llm)
     pool   = loader.get_candidate_demonstration_pool(pool_size=200, seed=42)
     sel    = SimilaritySelector(pool, seed=42)
@@ -118,16 +128,21 @@ def run_format_study(model_name, dataset, n_eval, k, out_dir):
         results[fmt] = {"accuracy": r.accuracy, "macro_f1": r.macro_f1, "mean_tokens": r.mean_prompt_tokens}
 
     save_json({"experiment": "exp5_formatting", "dataset": dataset, "model": model_name, "results": results},
-              out_dir / f"formats_{dataset}_{model_name}.json")
+              out_file)
     return results
 
 
-def run_ordering_study(model_name, dataset, n_eval, k, out_dir):
+def run_ordering_study(llm, model_name, dataset, n_eval, k, out_dir):
     """Compare similar_last vs similar_first vs random ordering."""
+    out_file = out_dir / f"ordering_{dataset}_{model_name}.json"
+    if out_file.exists():
+        logger.info(f"[SKIPPED] {out_file.name} already exists.")
+        with open(out_file) as f:
+            return json.load(f).get("results", {})
+
     logger.info(f"\n[ORDERING] model={model_name} dataset={dataset} k={k}")
 
     loader = get_dataset(dataset)
-    llm    = get_model(model_name)
     ev     = ICLEvaluator(loader, llm)
     pool   = loader.get_candidate_demonstration_pool(pool_size=200, seed=42)
     sel    = SimilaritySelector(pool, seed=42)
@@ -138,16 +153,21 @@ def run_ordering_study(model_name, dataset, n_eval, k, out_dir):
         results[ordering] = {"accuracy": r.accuracy, "macro_f1": r.macro_f1, "mean_tokens": r.mean_prompt_tokens}
 
     save_json({"experiment": "exp4_ordering", "dataset": dataset, "model": model_name, "results": results},
-              out_dir / f"ordering_{dataset}_{model_name}.json")
+              out_file)
     return results
 
 
-def run_k_sweep(model_name, dataset, n_eval, out_dir):
+def run_k_sweep(llm, model_name, dataset, n_eval, out_dir):
     """Sweep k ∈ {0, 2, 4, 8} to study demonstration scaling."""
+    out_file = out_dir / f"k_sweep_{dataset}_{model_name}.json"
+    if out_file.exists():
+        logger.info(f"[SKIPPED] {out_file.name} already exists.")
+        with open(out_file) as f:
+            return json.load(f).get("results", {})
+
     logger.info(f"\n[K-SWEEP] model={model_name} dataset={dataset}")
 
     loader = get_dataset(dataset)
-    llm    = get_model(model_name)
     ev     = ICLEvaluator(loader, llm)
     pool   = loader.get_candidate_demonstration_pool(pool_size=200, seed=42)
 
@@ -160,7 +180,7 @@ def run_k_sweep(model_name, dataset, n_eval, out_dir):
                                              "mean_prompt_tokens": r.mean_prompt_tokens}
 
     save_json({"experiment": "exp2_k_sweep", "dataset": dataset, "model": model_name, "results": results},
-              out_dir / f"k_sweep_{dataset}_{model_name}.json")
+              out_file)
     return results
 
 
@@ -302,11 +322,19 @@ def main():
             logger.info(f"\n{'#'*70}")
             logger.info(f"# MODEL: {model_name}")
             logger.info(f"{'#'*70}")
+            llm = get_model(model_name)
             for dataset in args.datasets:
-                run_baselines(model_name, dataset, args.n_eval, args.k, args.seeds, out_dir)
-                run_format_study(model_name, dataset, args.n_eval, args.k, out_dir)
-                run_ordering_study(model_name, dataset, args.n_eval, args.k, out_dir)
-                run_k_sweep(model_name, dataset, args.n_eval, out_dir)
+                run_baselines(llm, model_name, dataset, args.n_eval, args.k, args.seeds, out_dir)
+                run_format_study(llm, model_name, dataset, args.n_eval, args.k, out_dir)
+                run_ordering_study(llm, model_name, dataset, args.n_eval, args.k, out_dir)
+                run_k_sweep(llm, model_name, dataset, args.n_eval, out_dir)
+
+            # Explicitly free model and clear GPU VRAM before next model is loaded
+            del llm
+            import gc
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     logger.info("\nGenerating plots...")
     generate_plots(out_dir, figures_dir)
