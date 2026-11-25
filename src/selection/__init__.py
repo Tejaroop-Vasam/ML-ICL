@@ -4,6 +4,7 @@ from src.selection.base_selector import BaseSelector
 from src.selection.random_selector import RandomSelector
 from src.selection.similarity_selector import SimilaritySelector
 from src.selection.budget_aware_selector import BudgetAwareSelector
+from src.selection.oracle_selector import OracleSelector
 from src.selection.ordering import order_demonstrations
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     "RandomSelector",
     "SimilaritySelector",
     "BudgetAwareSelector",
+    "OracleSelector",
     "order_demonstrations",
 ]

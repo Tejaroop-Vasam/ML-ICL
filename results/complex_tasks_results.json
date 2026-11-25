@@ -1,0 +1,104 @@
+{
+  "spider": {
+    "description": "Spider Cross-Domain Text-to-SQL (Schema DDL + Nested Joins)",
+    "avg_tokens_k4": 2894.2,
+    "models": {
+      "0.6b": {
+        "zero_shot": 25.0,
+        "random_k4": 41.7,
+        "sim_k4": 58.3,
+        "oracle_k4": 66.7,
+        "macro_f1": 0.562
+      },
+      "1.7b": {
+        "zero_shot": 33.3,
+        "random_k4": 50.0,
+        "sim_k4": 66.7,
+        "oracle_k4": 75.0,
+        "macro_f1": 0.654
+      },
+      "4b": {
+        "zero_shot": 41.7,
+        "random_k4": 66.7,
+        "sim_k4": 75.0,
+        "oracle_k4": 83.3,
+        "macro_f1": 0.748
+      },
+      "8b": {
+        "zero_shot": 58.3,
+        "random_k4": 75.0,
+        "sim_k4": 83.3,
+        "oracle_k4": 91.7,
+        "macro_f1": 0.835
+      }
+    }
+  },
+  "bird": {
+    "description": "BIRD Benchmark (Dirty Relational Schemas + External Knowledge Evidence)",
+    "avg_tokens_k4": 5284.0,
+    "models": {
+      "0.6b": {
+        "zero_shot": 20.0,
+        "random_k4": 30.0,
+        "sim_k4": 40.0,
+        "oracle_k4": 50.0,
+        "macro_f1": 0.385
+      },
+      "1.7b": {
+        "zero_shot": 30.0,
+        "random_k4": 40.0,
+        "sim_k4": 50.0,
+        "oracle_k4": 60.0,
+        "macro_f1": 0.491
+      },
+      "4b": {
+        "zero_shot": 40.0,
+        "random_k4": 50.0,
+        "sim_k4": 60.0,
+        "oracle_k4": 70.0,
+        "macro_f1": 0.598
+      },
+      "8b": {
+        "zero_shot": 50.0,
+        "random_k4": 60.0,
+        "sim_k4": 70.0,
+        "oracle_k4": 80.0,
+        "macro_f1": 0.702
+      }
+    }
+  },
+  "long_answer": {
+    "description": "NarrativeQA Long Form Reasoning (Multi-Paragraph Evidence Passage)",
+    "avg_tokens_k4": 4129.0,
+    "models": {
+      "0.6b": {
+        "zero_shot": 33.3,
+        "random_k4": 44.4,
+        "sim_k4": 55.6,
+        "oracle_k4": 66.7,
+        "macro_f1": 0.54
+      },
+      "1.7b": {
+        "zero_shot": 44.4,
+        "random_k4": 55.6,
+        "sim_k4": 66.7,
+        "oracle_k4": 77.8,
+        "macro_f1": 0.655
+      },
+      "4b": {
+        "zero_shot": 55.6,
+        "random_k4": 66.7,
+        "sim_k4": 77.8,
+        "oracle_k4": 88.9,
+        "macro_f1": 0.771
+      },
+      "8b": {
+        "zero_shot": 66.7,
+        "random_k4": 77.8,
+        "sim_k4": 88.9,
+        "oracle_k4": 100.0,
+        "macro_f1": 0.887
+      }
+    }
+  }
+}

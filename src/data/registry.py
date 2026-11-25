@@ -6,12 +6,20 @@ from src.data.yelp_loader import YelpPolarityDataLoader
 from src.data.yahoo_loader import YahooAnswersDataLoader
 from src.data.trec_loader import TRECDataLoader
 from src.data.imdb_loader import IMDbDataLoader
+from src.data.complex_tasks_loader import (
+    SpiderDataLoader,
+    BIRDDataLoader,
+    LongAnswerDataLoader,
+)
 
 DATASET_REGISTRY: Dict[str, Type[BaseDataLoader]] = {
     "yelp_polarity": YelpPolarityDataLoader,
     "yahoo_answers": YahooAnswersDataLoader,
     "trec": TRECDataLoader,
     "imdb": IMDbDataLoader,
+    "spider": SpiderDataLoader,
+    "bird": BIRDDataLoader,
+    "long_answer": LongAnswerDataLoader,
 }
 
 

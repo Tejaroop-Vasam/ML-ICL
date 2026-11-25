@@ -22,3 +22,7 @@ data/raw/
 logs/
 .system_generated/
 .DS_Store
+
+# Reviewer experiment downloads and checkpoints
+/ml_icl_benchmark_data/
+/ml_icl_review_runs/

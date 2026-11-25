@@ -134,6 +134,21 @@ class SimilaritySelector(BaseSelector):
             seed=self.seed,
         )
 
+    def compute_similarity_scores(self, test_example: ICLExample, candidates: List[ICLExample]) -> np.ndarray:
+        """Compute cosine similarity scores between test example and a candidate subset."""
+        if not candidates:
+            return np.array([])
+        model = self._get_model()
+        if test_example.id in self._query_cache:
+            query_emb = self._query_cache[test_example.id]
+        else:
+            query_emb = model.encode([test_example.text], normalize_embeddings=True, convert_to_numpy=True)[0]
+            self._query_cache[test_example.id] = query_emb
+
+        cand_texts = [c.text for c in candidates]
+        cand_embs = model.encode(cand_texts, normalize_embeddings=True, convert_to_numpy=True)
+        return np.dot(cand_embs, query_emb)
+
     def compute_similarity_score(self, demo: ICLExample, test_example: ICLExample) -> float:
         """Compute cosine similarity between a single demo and test example."""
         model = self._get_model()

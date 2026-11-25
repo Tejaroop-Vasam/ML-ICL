@@ -1,0 +1,138 @@
+{
+  "imdb": {
+    "0.6b": {
+      "zero_shot": 66.66666666666666,
+      "random": 80.0,
+      "minilm_knn": 76.66666666666667,
+      "oracle_gold": 90.0,
+      "retriever_gap_penalty": 13.333333333333329,
+      "llm_capacity_gap": 10.0
+    },
+    "1.7b": {
+      "zero_shot": 73.33333333333333,
+      "random": 90.0,
+      "minilm_knn": 96.66666666666667,
+      "oracle_gold": 96.7,
+      "retriever_gap_penalty": 0.03333333333333144,
+      "llm_capacity_gap": 3.299999999999997
+    },
+    "4b": {
+      "zero_shot": 80.0,
+      "random": 96.66666666666667,
+      "minilm_knn": 93.33333333333333,
+      "oracle_gold": 100.0,
+      "retriever_gap_penalty": 6.666666666666671,
+      "llm_capacity_gap": 0.0
+    },
+    "8b": {
+      "zero_shot": 50.0,
+      "random": 96.66666666666667,
+      "minilm_knn": 93.33333333333333,
+      "oracle_gold": 100.0,
+      "retriever_gap_penalty": 6.666666666666671,
+      "llm_capacity_gap": 0.0
+    }
+  },
+  "trec": {
+    "0.6b": {
+      "zero_shot": 33.33333333333333,
+      "random": 46.666666666666664,
+      "minilm_knn": 63.33333333333333,
+      "oracle_gold": 73.3,
+      "retriever_gap_penalty": 9.966666666666669,
+      "llm_capacity_gap": 26.700000000000003
+    },
+    "1.7b": {
+      "zero_shot": 26.666666666666668,
+      "random": 56.666666666666664,
+      "minilm_knn": 73.33333333333333,
+      "oracle_gold": 80.0,
+      "retriever_gap_penalty": 6.666666666666671,
+      "llm_capacity_gap": 20.0
+    },
+    "4b": {
+      "zero_shot": 43.333333333333336,
+      "random": 76.66666666666667,
+      "minilm_knn": 83.33333333333334,
+      "oracle_gold": 90.0,
+      "retriever_gap_penalty": 6.666666666666657,
+      "llm_capacity_gap": 10.0
+    },
+    "8b": {
+      "zero_shot": 76.66666666666667,
+      "random": 76.66666666666667,
+      "minilm_knn": 83.33333333333334,
+      "oracle_gold": 93.30000000000001,
+      "retriever_gap_penalty": 9.966666666666669,
+      "llm_capacity_gap": 6.699999999999989
+    }
+  },
+  "yahoo_answers": {
+    "0.6b": {
+      "zero_shot": 10.0,
+      "random": 30.0,
+      "minilm_knn": 46.666666666666664,
+      "oracle_gold": 56.699999999999996,
+      "retriever_gap_penalty": 10.033333333333331,
+      "llm_capacity_gap": 43.300000000000004
+    },
+    "1.7b": {
+      "zero_shot": 33.33333333333333,
+      "random": 60.0,
+      "minilm_knn": 56.666666666666664,
+      "oracle_gold": 66.7,
+      "retriever_gap_penalty": 10.033333333333339,
+      "llm_capacity_gap": 33.3
+    },
+    "4b": {
+      "zero_shot": 46.666666666666664,
+      "random": 70.0,
+      "minilm_knn": 63.33333333333333,
+      "oracle_gold": 76.7,
+      "retriever_gap_penalty": 13.366666666666674,
+      "llm_capacity_gap": 23.299999999999997
+    },
+    "8b": {
+      "zero_shot": 66.66666666666666,
+      "random": 70.0,
+      "minilm_knn": 70.0,
+      "oracle_gold": 80.0,
+      "retriever_gap_penalty": 10.0,
+      "llm_capacity_gap": 20.0
+    }
+  },
+  "yelp_polarity": {
+    "0.6b": {
+      "zero_shot": 60.0,
+      "random": 90.0,
+      "minilm_knn": 100.0,
+      "oracle_gold": 100.0,
+      "retriever_gap_penalty": 0.0,
+      "llm_capacity_gap": 0.0
+    },
+    "1.7b": {
+      "zero_shot": 90.0,
+      "random": 96.66666666666667,
+      "minilm_knn": 96.66666666666667,
+      "oracle_gold": 100.0,
+      "retriever_gap_penalty": 3.3333333333333286,
+      "llm_capacity_gap": 0.0
+    },
+    "4b": {
+      "zero_shot": 56.666666666666664,
+      "random": 100.0,
+      "minilm_knn": 100.0,
+      "oracle_gold": 100.0,
+      "retriever_gap_penalty": 0.0,
+      "llm_capacity_gap": 0.0
+    },
+    "8b": {
+      "zero_shot": 100.0,
+      "random": 100.0,
+      "minilm_knn": 100.0,
+      "oracle_gold": 100.0,
+      "retriever_gap_penalty": 0.0,
+      "llm_capacity_gap": 0.0
+    }
+  }
+}

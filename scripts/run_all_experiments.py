@@ -199,6 +199,8 @@ def generate_plots(results_dir: Path, figures_dir: Path):
     for json_file in sorted(results_dir.glob("*.json")):
         with open(json_file) as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+            continue
         exp_type = data.get("experiment", "")
         results  = data.get("results", {})
         dataset  = data.get("dataset", "").upper()

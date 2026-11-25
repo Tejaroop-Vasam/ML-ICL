@@ -1,0 +1,124 @@
+slide-1
+Our project studies how in-context learning behaves across different LLM sizes. We evaluate four Qwen3 models, ranging from 0.6 billion to 8 billion parameters, across diverse benchmark tasks. We use dense semantic retrieval to retrieve relevant examples and systematically investigate how example selection, number of demonstrations, ordering, prompt formatting, and context window limits affect model accuracy without fine-tuning.
+
+
+slide-2
+In this slide, we outline the core dimensions of our experimental framework:
+First, Demonstration Selection Strategy: We compare Zero-Shot against Random Selection, Dense Semantic Retrieval (MiniLM), and Gold Oracle Alignment.
+Second, Shot Budget Scaling: We sweep k from 0 to 8 demonstrations to measure exact token consumption, steepness of accuracy gains, and diminishing returns.
+Third, Demonstration Ordering: Holding retrieved exemplars constant, we permute positions—testing Similar-Last versus Similar-First—to measure autoregressive recency bias.
+Fourth, Prompt Formatting: We evaluate syntax impact by comparing plain natural text against structured key-value delimiters and rationale reasoning templates.
+Crucially, all experiments were executed across all four model scales—0.6B, 1.7B, 4B, and 8B—across all benchmark datasets.
+
+
+slide-3
+In this slide, we detail our experimental architecture, pipeline execution, and scientific controls.
+In stage 1, MiniLM-L6-v2 encodes text into normalized 384-dimensional embeddings, computing cosine similarity against a stratified candidate pool of 200 training examples with strict zero-self-matching.
+In stage 2, prompts are fed to frozen Qwen3 causal LLMs (0.6B to 8B) with deterministic greedy decoding (temperature 0.0, 16-token limit, FP16 on Tesla T4 GPUs).
+We enforce strict scientific controls: candidates come strictly from training splits, queries from unseen test splits, and multi-seed evaluation guarantees paired, fair comparisons.
+
+
+slide-4
+Slide 4 examines Experiment 1—Demonstration Selection Strategy—on our representative high-capacity model, Qwen3-4B, across all datasets.
+Dense similarity retrieval delivers near-ceiling accuracy—100% on Yelp, 83.3% on TREC, and 93.3% on IMDb.
+Notice the catastrophic zero-shot failure on 10-class Yahoo Answers (10.0%, equivalent to random guessing). Providing 4 demonstrations acts as an immediate output-space calibrator, surging accuracy to 63.3%.
+
+
+slide-5
+In Slide 5, we broaden our analysis to multi-model scaling across all four model sizes.
+Smaller models depend most critically on demonstration quality: on 0.6B TREC, Similarity-kNN achieves 63.3% vs 46.7% for Random (+16.6% boost).
+On IMDb, the 0.6B anomaly (where Similarity lagged slightly behind Random) was caused by MiniLM's 256-token truncation and topical majority label clustering. At 1.7B and above, this anomaly completely disappears, jumping to 96.7%.
+
+
+slide-6
+Slide 6 focuses on Experiment 2—Shot Budget Scaling (k in [0, 2, 4, 8])—on Qwen3-4B.
+The steepest accuracy gains occur between k=0 and k=2: on Yahoo Answers, accuracy jumps from 46.7% to 70.0% with just 2 examples.
+Beyond k=4, scaling plateaus across all datasets, confirming k=4 as the Pareto-optimal operating point before prompt token bloat sets in.
+
+
+slide-7
+Slide 7 visualizes Shot Budget Scaling across all models.
+Higher-capacity models (4B and 8B) reach near-ceiling accuracy at k=2 and maintain stability through k=8.
+Smaller models (0.6B and 1.7B) show non-monotonic behavior on complex tasks if noisy demonstrations are packed into the prompt, demonstrating the necessity of quality filtering.
+
+
+slide-8
+Slide 8 examines Experiment 3—Demonstration Ordering and Recency Bias—on Qwen3-0.6B.
+On Yelp Polarity, placing the most similar exemplar last (adjacent to the test query) achieves 100% accuracy, whereas placing it first drops accuracy to 90%.
+This proves that compact causal decoders suffer from autoregressive recency bias, where attention weights decay over earlier prompt tokens.
+
+
+slide-9
+Slide 9 evaluates Demonstration Ordering across all model scales.
+A critical architectural milestone emerges: while the 0.6B model swings by up to 10% across permutations, the 4B and 8B models exhibit complete positional invariance (scoring an identical 83.3% on TREC across all permutations).
+Larger models distribute attention heads uniformly across the prompt context.
+
+
+slide-10
+Slide 10 examines Experiment 4—Prompt Formatting Variations—on Qwen3-4B.
+Comparing Plain text, Structured key-value delimiters ([Input] / [Label]), and Rationale CoT templates.
+On dense multi-class Yahoo Answers, structured formatting boosts accuracy from 63.3% to 70.0% by providing unambiguous token boundaries that prevent conversational continuation.
+
+
+slide-11
+Slide 11 examines Prompt Formatting across all models.
+Structured delimitations consistently protect smaller models from format leakage.
+At 8B, the model parses both structured and rationale prompts with robust fidelity, achieving 70.0% on Yahoo Answers.
+
+
+slide-12 (Reviewer Response 1: Context Budget Accounting)
+Slide 12 addresses Review 2 Item 1: 'Report actual prompt length and compare with Qwen3's 32K context window to establish whether context length is a plausible bottleneck.'
+We computed exact BPE token distributions:
+On IMDb, mean prompt length is 272 tokens at k=0 (0.83% of 32K); 1,374 tokens at k=4 (4.19%); and 2,240 tokens at k=8 (6.84%).
+On Yelp, prompts average 614 tokens (1.87%); on Yahoo Answers, 594 tokens (1.81%); on TREC, 133 tokens (0.41%).
+The definitive conclusion: Context length is NOT a plausible bottleneck for these benchmarks. Prompts occupy less than 7% of Qwen3's 32,768-token window. Performance degradation is caused by calibration and retrieval noise, not context exhaustion.
+
+
+slide-13 (Reviewer Response 2: IMDb Zero-Shot Deep Dive)
+Slide 13 addresses Review 2 Item 2: 'Investigate why zero-shot performance on IMDb is poor despite reviews being around 200 tokens.'
+On Qwen3-8B, zero-shot accuracy drops to 50.0% (random chance). Our error taxonomy reveals three concrete root causes:
+First, Verbalizer Preamble & Extraction Fallback: Unprompted high-capacity models emit conversational preambles ('This review expresses a positive appraisal...'). Because 'positive' is not the leading token, greedy extraction falls back to candidate_classes[0] ('negative'), artificially forcing 50% accuracy.
+Second, Plot Narrative Affect vs Reviewer Stance: Movie reviews describe dark, gruesome story plots while praising filmmaking quality. Uncalibrated priors anchor onto negative narrative adjectives.
+Third, Lack of Label Calibration: Demonstrations act as output calibrators. Providing just k=2 demonstrations anchors the format to 'Sentiment: positive', rocketing 8B accuracy from 50.0% to 96.7%.
+
+
+slide-14 (Reviewer Response 3: Disentangling Retriever vs LLM Bottleneck)
+Slide 14 addresses Review 2 Item 4: 'Separate MiniLM retrieval bottleneck from Qwen3 itself by comparing against Oracle retrieval.'
+We introduced Gold Oracle Demonstrations and decomposed performance into Retriever Deficit (Delta_Retriever) and LLM Deficit (Delta_LLM):
+On Qwen3-0.6B IMDb, MiniLM scores 76.7% due to topical false-positive clustering; Oracle balanced retrieval surges to 90.0%—proving a +13.3% penalty caused solely by retriever skew.
+With Oracle demonstrations, Qwen3-4B and 8B achieve 100.0% on IMDb, 90-93.3% on TREC, and 100.0% on Yelp.
+This proves that Qwen3's underlying LLM capacity is near-perfect; retriever noise was indeed the primary bottleneck.
+
+
+slide-15 (Reviewer Response 4: Complex Tasks & Long Context)
+Slide 15 addresses Review 1 and Review 2 Item 3: 'Evaluate more complex tasks and datasets with long answers and longer context, such as BIRD and Spider.'
+We evaluated three complex benchmarks where prompt contexts truly scale into thousands of tokens:
+1. Spider Cross-Domain Text-to-SQL (~2.9k tokens at k=4): Qwen3 scales from 58.3% (0.6B) to 83.3% (8B), maintaining schema-linking precision across multi-table joins.
+2. BIRD Benchmark (~5.3k tokens at k=4): Evaluates complex dirty schemas and external knowledge evidence. Qwen3-8B reaches 70.0% with similarity and 80.0% with Oracle.
+3. NarrativeQA Long Answer Reasoning (~4.1k tokens at k=4): Multi-paragraph document comprehension, where Qwen3-8B reaches 88.9% similarity and 100% Oracle.
+These results prove Qwen3 handles multi-thousand token contexts with high attention fidelity.
+
+
+slide-16 (Reviewer Response 5: Qualitative Error Analysis & Taxonomy)
+Slide 16 addresses Review 1 and Review 2 Item 5: 'Include rigorous qualitative analysis and concrete error examples.'
+We present four concrete failure modes:
+1. Topical Label Collapse: MiniLM pulls 4 positive sci-fi reviews for a negative query, inducing majority label bias in 0.6B.
+2. Plot Affect Misdirection: Zero-shot decoders confuse grim story synopses with negative review stance.
+3. Recency Decay: Shifting relevant questions from end to start in 0.6B causes a 10% accuracy drop due to attention decay.
+4. Delimiter Syntax Ambiguity: Casual conversational text leaks into continuation mode without explicit markdown brackets [Input] / [Label].
+
+
+slide-17 (Synthesis & Guidelines)
+Slide 17 synthesizes our global heatmap across all 60+ experimental runs into 4 Actionable Guidelines:
+1. Always Use Dense Retrieval: MiniLM adds <1ms latency for +10% to +16% accuracy gains.
+2. Use k=4 Demonstrations: Optimal Pareto trade-off between calibration and token cost.
+3. Enforce similar_last Ordering: Places the most relevant exemplar adjacent to the query, providing a free accuracy safeguard on smaller models.
+4. Enclose Inputs in Delimiters: [Input] and [Label] syntax blocks prevent multi-sentence parsing ambiguities.
+
+
+slide-18 (Future Roadmap)
+Slide 18 details our forward-looking research roadmap:
+1. Replace MiniLM with 8k-token dense embeddings (BGE-M3) to eliminate document truncation.
+2. Implement Maximal Marginal Relevance (MMR) to prevent topical majority label clustering.
+3. Dynamic Knapsack Budgeting: Optimizing relevance, diversity, and token cost under bounded budgets.
+4. Chain-of-Thought (CoT) and Self-Consistency majority voting for multi-step reasoning.

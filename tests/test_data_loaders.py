@@ -84,5 +84,17 @@ class TestDataLoaders(unittest.TestCase):
         self.assertTrue(all(len(t.split()) >= 20 for t in long_subset.texts))
 
 
+    def test_spider_and_complex_loaders(self):
+        for name in ["spider", "bird", "long_answer"]:
+            loader = get_dataset(name)
+            splits = loader.load_data()
+            self.assertIn("train", splits)
+            self.assertIn("test", splits)
+            sample = loader.get_split("test")
+            self.assertGreater(len(sample), 0)
+            prompt = loader.format_prompt(sample[0])
+            self.assertGreater(len(prompt), 50)
+
+
 if __name__ == "__main__":
     unittest.main()

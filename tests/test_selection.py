@@ -6,6 +6,7 @@ from src.selection import (
     RandomSelector,
     SimilaritySelector,
     BudgetAwareSelector,
+    OracleSelector,
     order_demonstrations,
 )
 
@@ -54,6 +55,14 @@ class TestSelectionAndOrdering(unittest.TestCase):
         demos = sel.select_demonstrations(self.query, k=2, token_budget=50)
         self.assertLessEqual(len(demos), 2)
         self.assertTrue(all(isinstance(d, ICLExample) for d in demos))
+
+    def test_oracle_selector(self):
+        sel = OracleSelector(self.pool, mode="balanced_relevant", seed=42)
+        demos = sel.select_demonstrations(self.query, k=2)
+        self.assertEqual(len(demos), 2)
+        # Should have both classes represented (balanced)
+        labels = {d.label for d in demos}
+        self.assertEqual(labels, {0, 1})
 
 
 if __name__ == "__main__":

@@ -1,8 +1,9 @@
 """Base LLM interface for In-Context Learning evaluation."""
 
-import re
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional, Any
+from typing import List
+
+from src.label_parsing import extract_legacy_label
 
 
 class BaseLLM(ABC):
@@ -26,26 +27,5 @@ class BaseLLM(ABC):
 
         Matches candidate class names (case-insensitive) appearing in the generated text.
         """
-        clean_gen = generated_text.strip()
-        first_line = clean_gen.split("\n")[0].strip()
-
-        # 1. Exact match at start of first line
-        for cls in candidate_classes:
-            pattern = rf"^\b{re.escape(cls)}\b"
-            if re.search(pattern, first_line, re.IGNORECASE):
-                return cls
-
-        # 2. Search anywhere in first line
-        for cls in candidate_classes:
-            pattern = rf"\b{re.escape(cls)}\b"
-            if re.search(pattern, first_line, re.IGNORECASE):
-                return cls
-
-        # 3. Search anywhere in full generated output
-        for cls in candidate_classes:
-            pattern = rf"\b{re.escape(cls)}\b"
-            if re.search(pattern, clean_gen, re.IGNORECASE):
-                return cls
-
-        # Default fallback: return first candidate class if nothing matches
-        return candidate_classes[0]
+        label, _ = extract_legacy_label(generated_text, candidate_classes)
+        return label

@@ -2,11 +2,11 @@ PYTHON ?= $(shell if [ -f .venv/bin/python ]; then echo .venv/bin/python; else w
 
 # Configurable defaults (override with `make run_all MODELS="0.6b 1.7b 4b 8b" N_EVAL=100`)
 MODELS   ?= 0.6b 1.7b
-DATASETS ?= yelp_polarity yahoo_answers trec
+DATASETS ?= imdb
 N_EVAL   ?= 30
 K        ?= 4
 
-.PHONY: help install run_all run_all_models run_0.6b run_1.7b run_4b run_8b npz profile test exp1 exp2 exp4 exp5 proposed plot clean
+.PHONY: help install run_all run_all_models run_0.6b run_1.7b run_4b run_8b npz profile test exp1 exp2 exp4 exp5 proposed plot oracle complex qualitative report ppt review_artifacts clean
 
 help:
 	@echo "Available commands:"
@@ -19,7 +19,10 @@ help:
 	@echo "  make run_all_models  - Run ALL experiments on ALL models (0.6b, 1.7b, 4b, 8b) and ALL datasets"
 	@echo "                         Usage: make run_all_models N_EVAL=30 K=4"
 	@echo "  make npz             - Convert and cache all datasets into compressed NumPy .npz"
-	@echo "  make profile         - Profile sequence length and word counts across datasets"
+	@echo "  make profile         - Profile prompt token length vs Qwen3 32K context window"
+	@echo "  make oracle          - Run Oracle vs MiniLM study disentangling retriever vs LLM"
+	@echo "  make complex         - Run evaluation on Spider, BIRD, and Long-Answer tasks"
+	@echo "  make qualitative     - Run rigorous qualitative error analysis & case studies"
 	@echo "  make test            - Run the complete unit test suite"
 	@echo "  make exp1            - Run Experiment 1: Baselines (Zero-Shot vs Random vs Similarity)"
 	@echo "  make exp2            - Run Experiment 2: Demonstration count (k-sweep)"
@@ -27,6 +30,9 @@ help:
 	@echo "  make exp5            - Run Experiment 5: Demonstration formatting study"
 	@echo "  make proposed        - Run Proposed Method: Budget-aware selection on IMDb"
 	@echo "  make plot            - Generate publication-ready figures for all results in results/"
+	@echo "  make ppt             - Generate 18-slide PowerPoint presentation with Review Responses"
+	@echo "  make report          - Generate comprehensive Word report with Review Responses"
+	@echo "  make review_artifacts- Build all figures, slides, and Word reports addressing reviews"
 	@echo "  make clean           - Remove cached embeddings and Python bytecode"
 
 install:
@@ -75,9 +81,28 @@ exp5:
 proposed:
 	$(PYTHON) experiments/run_experiment.py --experiment proposed_method --dataset imdb --token_budget 1500 --k 4 --n_eval 100
 
+oracle:
+	$(PYTHON) scripts/run_oracle_study.py
+
+complex:
+	$(PYTHON) scripts/run_complex_tasks_study.py
+
+qualitative:
+	$(PYTHON) scripts/qualitative_error_analysis.py
+
 plot:
 	$(PYTHON) scripts/run_all_experiments.py --plot_only
 	$(PYTHON) scripts/plot_summary.py
+	$(PYTHON) scripts/plot_comprehensive_comparisons.py
+
+ppt:
+	$(PYTHON) scripts/generate_ppt.py
+
+report:
+	$(PYTHON) scripts/generate_word_report.py
+
+review_artifacts: profile oracle complex qualitative plot ppt report
+	@echo "All review-driven artifacts, plots, slides, and reports successfully built!"
 
 clean:
 	rm -rf data/cache/embeddings/*.npy
