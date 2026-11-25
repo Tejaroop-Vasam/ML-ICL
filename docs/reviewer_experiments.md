@@ -22,12 +22,12 @@ Use `--samples DATASET=all` for the full eligible split. IMDb and the other clas
 
 Spider and BIRD download their dev releases and SQLite databases automatically. If an official download fails, supply the official release ZIP or extracted directory with `--spider-path` or `--bird-dev-path`. Spider uses official training examples for few-shot SQL. BIRD adds its few-shot arm when you also provide the official train release with `--bird-train-path`.
 
-The runner commits completed trials to `checkpoint.sqlite` as it goes. Rerun the same configuration with the same GPU type to resume. Lower `--max-prompt-tokens` to fit a smaller GPU. Use `--skip-export` if you only need the checkpoint, or use `export` to package an existing checkpoint.
+The runner commits completed trials to `checkpoint.sqlite` as it goes. An exception stops the run and prints the underlying error. Rerun the same configuration with the same GPU type to resume from that checkpoint. Use `--skip-export` if you only need the checkpoint, or use `export` to package an existing checkpoint.
 
 ## Classification and IMDb diagnostics
 
-- Rebuilds the project's plain prompt and its original extraction route, including the first-label fallback. Every generation is scored by the original parser, a strict exact-label parser, and a unique-label-mention diagnostic. All three consume the same response.
-- Pairs raw continuation with Qwen3's official non-thinking chat template using the same instruction. It also tests the effect of asking for the label alone and, on IMDb, increasing the raw generation budget from 16 to 64 tokens. It records output cap hits, ambiguity, invalid outputs, and fallback.
+- Scores each generation by extracting one distinct candidate label anywhere in the response, ignoring case. Responses containing zero or multiple candidate labels count as incorrect. Label coverage measures the share that yield a prediction, including incorrect predictions. A label in a continuation or explanation can count as a prediction, so inspect the raw text for qualitative claims.
+- Pairs raw continuation with Qwen3's official non-thinking chat template using the same instruction. It also tests asking for the label alone and, on IMDb, increasing the raw generation budget from 16 to 64 tokens. It records output cap hits, ambiguous responses, and responses without candidate labels.
 - IMDb also compares teacher-forced label likelihoods, reversal of the order in the instruction, and prior adjustment using content-free inputs. Head and tail slices probe sensitivity to where review evidence appears. Those slices keep the full review's label as a reference for the intervention.
 - Compares random, BGE-M3, and training-label-balanced BGE-M3 demonstrations at a fixed shot count. The BGE-M3 sweep uses the project's 2, 4, and 8-shot settings. IMDb additionally changes order and prompt format on the same chosen shots. IMDb's same-label oracle deliberately uses the test label to pick demonstrations and serves as a label-informed diagnostic.
 - Logs BGE-M3 tokenizer lengths separately from Qwen3 lengths. Interpret comparisons on the paired example IDs. BGE-M3 uses normalized dense embeddings, cosine similarity, and a limit of 8,192 tokens per input. [BGE-M3 model card](https://huggingface.co/BAAI/bge-m3) · [Contextual calibration](https://proceedings.mlr.press/v139/zhao21c.html)
@@ -36,7 +36,7 @@ The runner commits completed trials to `checkpoint.sqlite` as it goes. Rerun the
 
 Qwen3 generates SQL against official dev schemas. The held-out reference SQL is stored for scoring. The oracle prompt exposes only the tables referenced by the gold query. Retrieved and random schemas receive the same number of tables when that count can be recovered, so these are controlled comparisons at a gold-informed table count. Full schema is the deployable zero-shot baseline. BIRD also tests removing its benchmark-provided domain evidence while keeping the full schema. The SQL few-shot arm uses BGE-M3 to retrieve examples from official training databases outside the dev set.
 
-The runner executes one read-only SQL statement per prediction and compares its results to the reference. It records parse and execution errors, result shape, and schema coverage. Spider's single-database execution check preserves row order when the reference requests it and preserves multiplicity otherwise. Spider's official test-suite metric uses additional database instances. BIRD uses its row-set equality rule with local query timeout and row limits. Treat gold-query errors separately when evaluating accuracy. [Spider 1.0](https://yale-lily.github.io/spider) · [Spider test-suite evaluator](https://github.com/taoyds/test-suite-sql-eval) · [BIRD benchmark](https://bird-bench.github.io/) · [BIRD execution scorer](https://github.com/AlibabaResearch/DAMO-ConvAI/blob/main/bird/llm/src/evaluation.py)
+The runner executes one read-only SQL statement per prediction and compares its results to the reference. It records result shape and schema coverage for scored queries. SQL parsing and execution exceptions stop the run. Spider's single-database execution check preserves row order when the reference requests it and preserves multiplicity otherwise. Spider's official test-suite metric uses additional database instances. BIRD uses its row-set equality rule with local query timeout and row limits. [Spider 1.0](https://yale-lily.github.io/spider) · [Spider test-suite evaluator](https://github.com/taoyds/test-suite-sql-eval) · [BIRD benchmark](https://bird-bench.github.io/) · [BIRD execution scorer](https://github.com/AlibabaResearch/DAMO-ConvAI/blob/main/bird/llm/src/evaluation.py)
 
 ## Long-answer QA and long-context stress
 
@@ -53,6 +53,19 @@ Generation is greedy with Qwen3 thinking disabled in the chat arms. The legacy r
 ## Export evidence for later review
 
 The ZIP contains the raw `trials.jsonl` ledger, exact rendered prompts in `prompts.jsonl.gz`, run manifest, checkpoint, and annotation files. Join a trial to its prompt using `prompt_sha256`. A null `raw_output` on a score-only arm indicates a model likelihood comparison. Keep outcome-bearing `annotation_key.jsonl` separate from the blinded packets.
+
+### Plot saved runs on a laptop
+
+From the repository root, install the laptop dependencies and pass the exports to the plot script:
+
+```bash
+python -m pip install -r requirements.txt
+python scripts/plot_reviewer_results.py path/to/run1.zip path/to/run2
+```
+
+You can pass ZIP files, extracted runs, or a parent directory of extracted runs. The script re-scores saved classification responses on your laptop. It needs only the exports and plotting dependencies. Open `results/reviewer_plots/index.html` for the figures, `condition_summary.csv` for condition-level metrics, and `classification_trials.csv` for the extracted labels, scoring method, and raw responses. Use `--output-dir` to choose a separate folder for a different set of runs. Exporting an existing checkpoint also applies the current scorer to the saved outputs.
+
+Cross-model comparisons use grouped horizontal bars, one per model for each condition. They compare scored trials with the same example, condition, rendered prompt, and reference answer inside each retriever and precision group. Each condition label shows the number of matched trials. Trial-status charts include skipped or failed trials, and performance charts use scored trials.
 
 The annotation export draws a seeded random cohort and a separate targeted cohort of disagreements and diagnostic outcomes. Two reviewers can independently fill the annotation template before reconciliation.
 

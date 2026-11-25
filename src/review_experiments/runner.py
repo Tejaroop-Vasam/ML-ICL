@@ -4,6 +4,7 @@ import gc
 import importlib.metadata
 import sqlite3
 import time
+from contextlib import ExitStack
 from dataclasses import asdict
 from pathlib import Path
 
@@ -12,8 +13,10 @@ import torch
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
+from src.label_parsing import score_classification_output
+
 from .artifacts import Checkpoint
-from .classification import CLASS_SOURCES, class_jobs, classification_prompt, label_paths
+from .classification import CLASS_SOURCES, class_jobs, classification_prompt
 from .common import digest, hub_revision, json_text
 from .config import CLASS_DATASETS, CLASS_MAX_NEW, NATIVE_WINDOW, QA_MAX_NEW, SQL_DATASETS, SQL_MAX_NEW, WEIGHT_MODES
 from .long_answer import CLAPNQ_ID, qa_jobs, qa_score
@@ -118,10 +121,11 @@ class QwenRunner:
                 prompt = classification_prompt("imdb", content_free_input, instruction=instruction)
                 prior_scores = self.log_scores(self.codec.encode(self.codec.render(prompt, job.mode)), labels)
                 probs = torch.softmax(torch.tensor([prior_scores[label] for label in labels]), dim=0).tolist()
-                prior_probabilities.append(dict(zip(labels, probs, strict=True)))
+                prior_probabilities.append(probs)
+            mean_probabilities = np.mean(prior_probabilities, axis=0)
             self.priors[instruction] = {
-                label: float(np.log(max(np.mean([row[label] for row in prior_probabilities]), 1e-30)))
-                for label in labels
+                label: float(np.log(max(probability, 1e-30)))
+                for label, probability in zip(labels, mean_probabilities, strict=True)
             }
         scores = self.log_scores(ids, labels)
         prior = self.priors[instruction]
@@ -130,20 +134,11 @@ class QwenRunner:
         cal_pred = max(calibrated, key=calibrated.get)
         return {
             "prediction": pred, "is_correct": pred == job.reference,
+            "score_method": "label_log_likelihood",
             "label_log_likelihood": scores, "content_free_label_log_prior": prior,
             "calibrated_scores": calibrated, "calibrated_prediction": cal_pred,
             "calibrated_correct": cal_pred == job.reference,
         }
-
-
-def classification_score(job, output):
-    result = label_paths(output, job.labels)
-    return {
-        **result, "prediction": result["strict_prediction"],
-        "is_correct": result["strict_prediction"] == job.reference,
-        "legacy_correct": result["legacy_prediction"] == job.reference,
-        "unique_mention_correct": result["unique_mention_prediction"] == job.reference,
-    }
 
 
 def manifest_for(config, model_id, weights, revision, retriever):
@@ -214,27 +209,20 @@ def evaluate_trial(config, job, codec, runner, checkpoint, manifest):
         row["status"] = "profile_only"
     else:
         started = time.perf_counter()
-        try:
-            if job.score_only:
-                row.update(runner.score_imdb(job, ids))
+        if job.score_only:
+            row.update(runner.score_imdb(job, ids))
+        else:
+            generation = runner.generate(ids, job.max_new, job.mode)
+            row.update(generation)
+            row["observed_total_tokens"] = prompt_tokens + generation["completion_tokens"]
+            output = generation["raw_output"]
+            if job.task == "classification":
+                row.update(score_classification_output(output, job.labels, job.reference))
+            elif job.task == "sql":
+                row.update(score_sql(job, output))
             else:
-                generation = runner.generate(ids, job.max_new, job.mode)
-                row.update(generation)
-                row["observed_total_tokens"] = prompt_tokens + generation["completion_tokens"]
-                output = generation["raw_output"]
-                if job.task == "classification":
-                    row.update(classification_score(job, output))
-                elif job.task == "sql":
-                    row.update(score_sql(job, output))
-                else:
-                    row.update(qa_score(job.reference, output))
-        except torch.cuda.OutOfMemoryError as exc:
-            row["status"] = "cuda_oom"
-            row["runtime_error"] = str(exc)
+                row.update(qa_score(job.reference, output))
         row["elapsed_seconds"] = time.perf_counter() - started
-        if row["status"] == "cuda_oom":
-            gc.collect()
-            torch.cuda.empty_cache()
     checkpoint.save(row, rendered)
 
 
@@ -247,28 +235,30 @@ def run_jobs(config, model_id, weights, retriever):
     run_dir.mkdir(parents=True, exist_ok=True)
     checkpoint = Checkpoint(run_dir / "checkpoint.sqlite", manifest, config.retry_oom)
     runner = None
-    try:
-        if not config.profile_only:
-            runner = QwenRunner(model_id, revision, codec, weights)
-        groups = [
-            (dataset, class_jobs(config, dataset, config.samples[dataset], retriever, codec))
-            for dataset in CLASS_DATASETS if config.samples[dataset] != 0
-        ]
-        groups.extend(
-            (dataset, sql_jobs(config, dataset, config.samples[dataset], retriever))
-            for dataset in SQL_DATASETS if config.samples[dataset] != 0
-        )
-        if config.samples["clapnq"] != 0:
-            groups.append(("clapnq", qa_jobs(config, config.samples["clapnq"], retriever, codec)))
 
-        for name, jobs in groups:
-            for job in tqdm(jobs, desc=name, unit="prompt"):
-                evaluate_trial(config, job, codec, runner, checkpoint, manifest)
-        checkpoint.mark_finished()
-    finally:
-        checkpoint.db.close()
-        del runner
+    def release_runner():
+        nonlocal runner
+        runner = None
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+    with ExitStack() as resources:
+        resources.callback(release_runner)
+        resources.callback(checkpoint.db.close)
+        if not config.profile_only:
+            runner = QwenRunner(model_id, revision, codec, weights)
+        for dataset in (*CLASS_DATASETS, *SQL_DATASETS, "clapnq"):
+            n_eval = config.samples[dataset]
+            if n_eval == 0:
+                continue
+            if dataset in CLASS_DATASETS:
+                jobs = class_jobs(config, dataset, n_eval, retriever, codec)
+            elif dataset in SQL_DATASETS:
+                jobs = sql_jobs(config, dataset, n_eval, retriever)
+            else:
+                jobs = qa_jobs(config, n_eval, retriever, codec)
+            for job in tqdm(jobs, desc=dataset, unit="prompt"):
+                evaluate_trial(config, job, codec, runner, checkpoint, manifest)
+        checkpoint.mark_finished()
     return run_dir

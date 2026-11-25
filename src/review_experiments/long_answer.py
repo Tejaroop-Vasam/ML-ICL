@@ -87,8 +87,8 @@ def stress_contexts(codec, question, gold, distractors, targets):
             count += 1
             variants = trial
         if count > 1:
-            for position, ordered, text, actual in variants:
-                yield target, position, ordered, text, actual
+            for variant in variants:
+                yield (target, *variant)
 
 
 def qa_jobs(config, n_eval, retriever, codec):
@@ -118,6 +118,7 @@ def qa_jobs(config, n_eval, retriever, codec):
     if len(distractors) < config.qa_candidates - 1 or len(train) < config.qa_demo_k:
         raise ValueError("Too few distinct CLAPNQ training items for the requested study.")
     demo_vectors = retriever.encode([row["question"] for row in train]) if config.qa_demo_k else None
+    stress_targets = [target for target in config.stress_prompt_targets if target <= config.max_prompt_tokens]
 
     for row in cases:
         sample_id, question = row["id"], row["question"]
@@ -128,7 +129,8 @@ def qa_jobs(config, n_eval, retriever, codec):
         texts = [entry["passage"] for entry in pool]
         ranked, scores = retriever.rank(retriever.encode(texts), query_vector)
         lengths = retriever.lengths(texts)
-        gold_index = next(i for i, entry in enumerate(pool) if entry is row)
+        gold_rank = next(rank for rank, idx in enumerate(ranked, 1) if pool[idx] is row)
+        best_passage = pool[ranked[0]]
         random_index = rng.randrange(len(pool))
         demo_ranking = retriever.rank(demo_vectors, query_vector)[0] if config.qa_demo_k else []
         demos = [train[i] for i in demo_ranking[:config.qa_demo_k][::-1]]
@@ -150,7 +152,7 @@ def qa_jobs(config, n_eval, retriever, codec):
                     "gold_support_sentences": row["support_sentences"],
                     "gold_evidence_id": sample_id, "gold_evidence_title": row["title"],
                     "retrieved_passage_ids": [entry["id"] for entry in chosen],
-                    "gold_passage_available": has_gold, "gold_rank": ranked.index(gold_index) + 1,
+                    "gold_passage_available": has_gold, "gold_rank": gold_rank,
                     "gold_evidence_marker": row["passage"].split("\n", 1)[0] if has_gold else None,
                     "retriever_limit": retriever.limit, "demonstration_ids": [entry["id"] for entry in demos],
                     **(extras or {}),
@@ -158,16 +160,15 @@ def qa_jobs(config, n_eval, retriever, codec):
             )
 
         yield job("no_passage", [])
-        yield job("bge_m3_passage", [pool[ranked[0]]], extras={"candidate_ranking": candidate_rows})
+        yield job("bge_m3_passage", [best_passage], extras={"candidate_ranking": candidate_rows})
         yield job("random_passage", [pool[random_index]])
         yield job("gold_passage", [row])
         if demos:
-            yield job(f"bge_m3_passage_icl_k{config.qa_demo_k}", [pool[ranked[0]]], demos=demos)
+            yield job(f"bge_m3_passage_icl_k{config.qa_demo_k}", [best_passage], demos=demos)
             yield job(f"gold_passage_icl_k{config.qa_demo_k}", [row], demos=demos)
         if sample_id in stress_cases:
             ordered = rng_for(config.seed, "clapnq", sample_id, "stress distractors").sample(distractors, len(distractors))
-            clipped = [target for target in config.stress_prompt_targets if target <= config.max_prompt_tokens]
-            for target, position, passages, text, actual in stress_contexts(codec, question, row, ordered, clipped):
+            for target, position, passages, text, actual in stress_contexts(codec, question, row, ordered, stress_targets):
                 yield job(
                     f"stress_{target}_{position}", passages, custom_text=text,
                     extras={"target_prompt_tokens": target, "sizing_prompt_tokens": actual,
@@ -179,11 +180,12 @@ def qa_score(references, output):
     def sentence_lines(text):
         return "\n".join(re.split(r"(?<=[.!?])\s+", text.strip()))
 
+    # ROUGE-Lsum uses sentence breaks. ROUGE-L tokenizes across whitespace.
+    output_lines = sentence_lines(output)
     scores = []
     for reference in references:
-        l = ROUGE.score(reference, output)["rougeL"]
-        lsum = ROUGE.score(sentence_lines(reference), sentence_lines(output))["rougeLsum"]
-        scores.append({"rouge_l": dict(l._asdict()), "rouge_lsum": dict(lsum._asdict())})
+        overlap = ROUGE.score(sentence_lines(reference), output_lines)
+        scores.append({"rouge_l": overlap["rougeL"]._asdict(), "rouge_lsum": overlap["rougeLsum"]._asdict()})
     return {
         "prediction": output.strip(), "prediction_words": len(output.split()),
         "abstained": output.strip().rstrip(".").casefold() == "insufficient evidence",

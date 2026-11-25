@@ -8,6 +8,8 @@ import zipfile
 from collections import defaultdict
 from contextlib import closing
 
+from src.label_parsing import CLASSIFICATION_SCORING, rescore_classification_trial
+
 from .common import choose, digest, json_text, rng_for, round_robin_sample
 
 
@@ -24,10 +26,11 @@ class Checkpoint:
                 id TEXT PRIMARY KEY, status TEXT NOT NULL, prompt_sha TEXT NOT NULL, payload TEXT NOT NULL
             );
         """)
+        configuration = json_text(manifest)
         with self.db:
-            self.db.execute("INSERT OR IGNORE INTO manifest VALUES (?, ?)", ("configuration", json_text(manifest)))
+            self.db.execute("INSERT OR IGNORE INTO manifest VALUES ('configuration', ?)", (configuration,))
         previous = self.db.execute("SELECT value FROM manifest WHERE key = 'configuration'").fetchone()[0]
-        if previous != json_text(manifest):
+        if previous != configuration:
             self.db.close()
             raise ValueError("Checkpoint configuration mismatch.")
 
@@ -58,38 +61,25 @@ ANNOTATION_TARGETED_PER_DATASET = 6
 
 def stream_trials(connection):
     for (payload,) in connection.execute("SELECT payload FROM trials ORDER BY id"):
-        yield json.loads(payload)
-
-
-def data_anchors(row, reference_k, dense_prefix):
-    condition = row["condition"]
-    if row["task"] == "classification":
-        return condition in {
-            "legacy_raw_16", "chat_label_only_16", "chat_label_only_scores",
-            f"{dense_prefix}_k{reference_k}", f"balanced_{dense_prefix}_k{reference_k}",
-            f"label_informed_oracle_k{reference_k}",
-        }
-    if row["task"] == "sql":
-        return condition in {"full_schema", f"{dense_prefix}_schema_matched_k", "oracle_schema"}
-    return condition in {f"{dense_prefix}_passage", "gold_passage"}
+        yield rescore_classification_trial(json.loads(payload))
 
 
 def case_stratum(variants, reference_k, dense_prefix):
     rows = {row["condition"]: row for row in variants}
-    first = variants[0]
-    if first["task"] == "classification":
-        legacy = rows.get("legacy_raw_16", {})
+    task = variants[0]["task"]
+    if task == "classification":
+        raw = rows.get("legacy_raw_16", {})
         label_only = rows.get("chat_label_only_16", {})
         dense = rows.get(f"{dense_prefix}_k{reference_k}", {})
         balanced = rows.get(f"balanced_{dense_prefix}_k{reference_k}", {})
-        if legacy.get("legacy_parser_route") == "defaulted_to_first_label":
-            return "legacy_parser_default"
-        if legacy.get("legacy_correct") != label_only.get("is_correct"):
-            return "legacy_vs_label_only_disagreement"
+        if raw.get("parse_status") in {"ambiguous", "no_label", "empty"}:
+            return "raw_response_without_unique_label"
+        if raw and label_only and raw.get("is_correct") != label_only.get("is_correct"):
+            return "raw_vs_label_only_disagreement"
         if dense.get("is_correct") != balanced.get("is_correct"):
             return "demo_selection_disagreement"
         return "agreement"
-    if first["task"] == "sql":
+    if task == "sql":
         dense = rows.get(f"{dense_prefix}_schema_matched_k", {})
         oracle = rows.get("oracle_schema", {})
         if dense and oracle and dense.get("is_correct") != oracle.get("is_correct"):
@@ -106,9 +96,16 @@ def write_annotation_packets(connection, run_dir, configuration):
     seed, reference_k = configuration["seed"], configuration["reference_k"]
     # Match the stored condition names when exporting an earlier checkpoint.
     dense_prefix = "minilm" if configuration.get("experiment_version") == "1.1" else "bge_m3"
+    dense_k = f"{dense_prefix}_k{reference_k}"
+    anchors = {
+        "classification": {"legacy_raw_16", "chat_label_only_16", "chat_label_only_scores",
+                           dense_k, f"balanced_{dense_k}", f"label_informed_oracle_k{reference_k}"},
+        "sql": {"full_schema", f"{dense_prefix}_schema_matched_k", "oracle_schema"},
+        "qa": {f"{dense_prefix}_passage", "gold_passage"},
+    }
     grouped = defaultdict(lambda: defaultdict(list))
     for row in stream_trials(connection):
-        if row["status"] == "ok" and data_anchors(row, reference_k, dense_prefix):
+        if row["status"] == "ok" and row["condition"] in anchors.get(row["task"], anchors["qa"]):
             grouped[row["dataset"]][row["sample_id"]].append(row)
 
     annotations_path = run_dir / "blind_annotations.jsonl"
@@ -126,7 +123,8 @@ def write_annotation_packets(connection, run_dir, configuration):
             cases = {sample_id: variants for sample_id, variants in cases.items() if len(variants) >= 2}
             ids = sorted(cases)
             random_ids = choose(ids, ANNOTATION_RANDOM_PER_DATASET, seed, dataset + "/annotation random")
-            from_other = [sample_id for sample_id in ids if sample_id not in set(random_ids)]
+            random_set = set(random_ids)
+            from_other = [sample_id for sample_id in ids if sample_id not in random_set]
             targeted = round_robin_sample(
                 from_other, ANNOTATION_TARGETED_PER_DATASET,
                 lambda sample_id: case_stratum(cases[sample_id], reference_k, dense_prefix),
@@ -151,7 +149,7 @@ def write_annotation_packets(connection, run_dir, configuration):
                     key.write(json_text({
                         "annotation_id": annotation_id, "trial_id": row["trial_id"],
                         "sample_id": sample_id, "condition": row["condition"], "prompt_sha256": row["prompt_sha256"],
-                        "sampling_cohort": "random" if sample_id in random_ids else "targeted",
+                        "sampling_cohort": "random" if sample_id in random_set else "targeted",
                         "targeted_stratum": stratum,
                     }) + "\n")
                     writer.writerow([annotation_id] + [""] * 11)
@@ -163,13 +161,13 @@ def export_raw(run_dir):
         raise FileNotFoundError(checkpoint_path)
     archive_path = run_dir.with_name(run_dir.name + ".zip")
     with closing(sqlite3.connect(checkpoint_path.resolve().as_uri() + "?mode=ro", uri=True)) as connection:
-        configuration = dict(connection.execute("SELECT key, value FROM manifest"))
-        manifest = {key: json.loads(value) for key, value in configuration.items()}
+        manifest = {key: json.loads(value) for key, value in connection.execute("SELECT key, value FROM manifest")}
+        manifest["classification_scoring"] = CLASSIFICATION_SCORING
         with (run_dir / "manifest.json").open("w", encoding="utf-8") as file:
             json.dump(manifest, file, indent=2, ensure_ascii=False)
         with (run_dir / "trials.jsonl").open("w", encoding="utf-8") as file:
-            for (payload,) in connection.execute("SELECT payload FROM trials ORDER BY id"):
-                file.write(payload + "\n")
+            for row in stream_trials(connection):
+                file.write(json_text(row) + "\n")
         with gzip.open(run_dir / "prompts.jsonl.gz", "wt", encoding="utf-8") as file:
             for sha, blob in connection.execute("SELECT sha, gzip_text FROM prompts ORDER BY sha"):
                 file.write(json_text({"prompt_sha256": sha, "text": gzip.decompress(blob).decode("utf-8")}) + "\n")

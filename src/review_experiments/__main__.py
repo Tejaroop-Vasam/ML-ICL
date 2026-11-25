@@ -10,10 +10,7 @@ from .config import DEFAULT_MODEL, DEFAULT_SAMPLES, WEIGHT_MODES, ReviewConfig
 def sample_count(value):
     if value.casefold() == "all":
         return None
-    try:
-        count = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("Use a nonnegative integer or 'all'.") from exc
+    count = int(value)
     if count < 0:
         raise argparse.ArgumentTypeError("Use a nonnegative integer or 'all'.")
     return count
@@ -67,18 +64,15 @@ def config_from_args(args, parser):
     settings = {item.name: getattr(args, item.name) for item in fields(ReviewConfig) if item.name != "samples"}
     for name in ("stress_prompt_targets", "random_seeds", "k_sweep"):
         settings[name] = tuple(settings[name])
-    try:
-        return ReviewConfig(samples=samples, **settings)
-    except ValueError as exc:
-        parser.error(str(exc))
+    return ReviewConfig(samples=samples, **settings)
 
 
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "export":
-        from .artifacts import export_raw
+    from .artifacts import export_raw
 
+    if args.command == "export":
         for run_dir in args.run_dirs:
             print(f"Raw evidence: {export_raw(run_dir)}")
         return
@@ -89,8 +83,8 @@ def main(argv=None):
     if not config.profile_only and not torch.cuda.is_available():
         parser.error("A CUDA runtime is required for inference. Use --profile-only for prompt accounting.")
 
-    from .artifacts import export_raw
-    from .common import Retriever
+    from src.retrieval import Retriever
+
     from .runner import run_jobs
 
     retriever = Retriever(device="cpu" if config.profile_only else "cuda")

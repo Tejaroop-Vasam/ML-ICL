@@ -1,14 +1,11 @@
 """Classification prompt construction and paired IMDb diagnostics."""
 
 import re
-from functools import lru_cache
+from dataclasses import dataclass
 
-from datasets import load_dataset
+from src.label_parsing import CLASSIFICATION_LABELS
 
-from src.data import ICLExample, IMDbDataLoader, get_dataset
-from src.label_parsing import extract_legacy_label
-
-from .common import Job, clean_key, hub_revision, rng_for, round_robin_sample
+from .common import Job, clean_key, hub_revision, rng_for, round_robin_sample, take_round_robin
 from .config import CLASS_MAX_NEW
 
 CLASS_SOURCES = {
@@ -18,23 +15,47 @@ CLASS_SOURCES = {
     "yahoo_answers": "community-datasets/yahoo_answers_topics",
 }
 LABEL_FIELDS = {"imdb": "label", "yelp_polarity": "label", "trec": "label_coarse", "yahoo_answers": "topic"}
+TASK_INSTRUCTIONS = {
+    "imdb": "Classify the sentiment of each movie review as either 'positive' or 'negative'.",
+    "yelp_polarity": "Classify the sentiment of the following Yelp review as either 'positive' or 'negative'.",
+    "trec": (
+        "Classify each question into one of the following 6 question types: "
+        "Description, Entity, Abbreviation, Human, Numeric, or Location."
+    ),
+    "yahoo_answers": (
+        "Classify the following Yahoo Answers question into one of the 10 topic categories: "
+        "Society & Culture, Science & Mathematics, Health, Education & Reference, "
+        "Computers & Internet, Sports, Business & Finance, Entertainment & Music, "
+        "Family & Relationships, or Politics & Government."
+    ),
+}
+PROMPT_PREFIXES = {
+    "imdb": ("Review: ", "Sentiment: "),
+    "yelp_polarity": ("Review: ", "Sentiment: "),
+    "trec": ("Question: ", "Type: "),
+    "yahoo_answers": ("Question: ", "Topic: "),
+}
 
 
-@lru_cache(maxsize=None)
-def prompt_loader(dataset):
-    return get_dataset(dataset)
+@dataclass(frozen=True)
+class ClassificationItem:
+    id: str
+    text: str
+    label_name: str
 
 
 def classification_prompt(dataset, query, demos=(), instruction=None, structured=False):
-    example = ICLExample(id="query", dataset=dataset, split="test", text=query, label=-1, label_name="")
-    return prompt_loader(dataset).format_prompt(
-        example, demonstrations=demos, format_type="structured" if structured else "plain",
-        custom_instruction=instruction,
-    )
+    input_prefix, label_prefix = ("[Input] ", "[Label] ") if structured else PROMPT_PREFIXES[dataset]
+    sections = [(instruction or TASK_INSTRUCTIONS[dataset]).strip()]
+    sections.extend(f"{input_prefix}{demo.text.strip()}\n{label_prefix}{demo.label_name}" for demo in demos)
+    sections.append(f"{input_prefix}{query.strip()}\n{label_prefix}".strip())
+    return "\n\n".join(sections)
 
 
 def classification_data(config, dataset, n_eval):
-    loader = prompt_loader(dataset)
+    from datasets import load_dataset
+
+    labels = CLASSIFICATION_LABELS[dataset]
     label_field = LABEL_FIELDS[dataset]
     repo = CLASS_SOURCES[dataset]
     revision = hub_revision(repo)
@@ -50,12 +71,10 @@ def classification_data(config, dataset, n_eval):
         else:
             text = row["text"].strip()
         if dataset == "imdb":
-            text = IMDbDataLoader._clean_review_text(text)
+            text = re.sub(r"<br\s*/?>", "\n", text)
+            text = re.sub(r"\s+", " ", text).strip()
         label = int(row[label_field])
-        return ICLExample(
-            id=f"{dataset}_{split}_{idx}", dataset=dataset, split=split,
-            text=text, label=label, label_name=loader.classes[label],
-        )
+        return ClassificationItem(id=f"{dataset}_{split}_{idx}", text=text, label_name=labels[label])
 
     # Select by the label column first, so very large train splits are not materialized as Python text rows.
     def subset(split, limit):
@@ -74,28 +93,10 @@ def classification_data(config, dataset, n_eval):
     return queries, pool, revision
 
 
-def label_paths(output, labels):
-    clean = output.strip()
-    stripped = clean.strip("`*\"'").rstrip(".").strip("`*\"' ")
-    exact = next((label for label in labels if stripped.casefold() == label.casefold()), None)
-    patterns = {label: rf"\b{re.escape(label)}\b" for label in labels}
-    mentions = [label for label in labels if re.search(patterns[label], clean, re.I)]
-    legacy, route = extract_legacy_label(output, labels)
-    return {
-        "strict_prediction": exact,
-        "unique_mention_prediction": mentions[0] if len(mentions) == 1 else None,
-        "mentions": mentions,
-        "legacy_prediction": legacy,
-        "legacy_parser_route": route,
-        "parse_status": ("exact" if exact else "unique_mention" if len(mentions) == 1
-                         else "ambiguous" if mentions else "no_label" if clean else "empty"),
-    }
-
-
 def class_jobs(config, dataset, n_eval, retriever, codec):
     queries, pool, revision = classification_data(config, dataset, n_eval)
-    loader = prompt_loader(dataset)
-    labels = tuple(loader.classes)
+    labels = CLASSIFICATION_LABELS[dataset]
+    label_only = TASK_INSTRUCTIONS[dataset] + "\nReturn only the exact label."
     pool_text = [row.text for row in pool]
     pool_vectors = retriever.encode(pool_text)
     pool_lengths = retriever.lengths(pool_text)
@@ -138,11 +139,10 @@ def class_jobs(config, dataset, n_eval, retriever, codec):
 
             yield job("legacy_raw_16", mode="raw")
             yield job("chat_same_instruction_16")
-            strict = loader.task_instruction + "\nReturn only the exact label."
-            yield job("chat_label_only_16", instruction=strict)
+            yield job("chat_label_only_16", instruction=label_only)
             if dataset == "imdb":
                 yield job("legacy_raw_64", mode="raw", limit=64)
-                yield job("chat_label_only_scores", instruction=strict, score=True)
+                yield job("chat_label_only_scores", instruction=label_only, score=True)
                 reversed_instruction = "Classify the sentiment of each movie review as either 'negative' or 'positive'."
                 yield job("chat_label_only_reversed_scores",
                           instruction=reversed_instruction + "\nReturn only the exact label.", score=True)
@@ -151,35 +151,29 @@ def class_jobs(config, dataset, n_eval, retriever, codec):
                     views = {"head": review_tokens[:config.imdb_slice_tokens], "tail": review_tokens[-config.imdb_slice_tokens:]}
                     for view, token_ids in views.items():
                         text = codec.tokenizer.decode(token_ids, clean_up_tokenization_spaces=False)
-                        yield job(f"chat_label_only_{view}", instruction=strict, query_view=text,
+                        yield job(f"chat_label_only_{view}", instruction=label_only, query_view=text,
                                   extras={"review_view": view, "full_review_tokens": len(review_tokens)})
 
             for k in sorted(set(config.k_sweep) | {config.reference_k}):
                 selected = available[:k]
-                yield job(f"bge_m3_k{k}", selected[::-1], instruction=strict)
+                yield job(f"bge_m3_k{k}", selected[::-1], instruction=label_only)
             for seed in config.random_seeds:
                 chosen = rng_for(config.seed, dataset, sample_id, "random", seed).sample(available, config.reference_k)
-                yield job(f"random_k{config.reference_k}_seed{seed}", chosen, instruction=strict,
+                yield job(f"random_k{config.reference_k}_seed{seed}", chosen, instruction=label_only,
                           extras={"random_seed": seed})
 
             # Equal-quota retrieval uses training labels. Rotate remainder without the held-out label.
             label_order = list(labels)
             rng_for(config.seed, dataset, sample_id, "class order").shuffle(label_order)
-            by_label = {label: [i for i in available if pool[i].label_name == label] for label in label_order}
-            balanced = []
-            while len(balanced) < config.reference_k:
-                for candidates in by_label.values():
-                    if candidates:
-                        balanced.append(candidates.pop(0))
-                        if len(balanced) == config.reference_k:
-                            break
+            by_label = ([i for i in available if pool[i].label_name == label] for label in label_order)
+            balanced = take_round_robin(by_label, config.reference_k)
             yield job(f"balanced_bge_m3_k{config.reference_k}", sorted(balanced, key=lambda i: scores[i]),
-                      instruction=strict)
+                      instruction=label_only)
             if dataset == "imdb":
                 oracle = [i for i in available if pool[i].label_name == gold][:config.reference_k]
                 if len(oracle) == config.reference_k:
-                    yield job(f"label_informed_oracle_k{config.reference_k}", oracle[::-1], instruction=strict,
+                    yield job(f"label_informed_oracle_k{config.reference_k}", oracle[::-1], instruction=label_only,
                               extras={"uses_query_gold": True})
                 chosen = available[:config.reference_k]
-                yield job(f"bge_m3_similar_first_k{config.reference_k}", chosen, instruction=strict)
-                yield job(f"bge_m3_structured_k{config.reference_k}", chosen[::-1], instruction=strict, structured=True)
+                yield job(f"bge_m3_similar_first_k{config.reference_k}", chosen, instruction=label_only)
+                yield job(f"bge_m3_structured_k{config.reference_k}", chosen[::-1], instruction=label_only, structured=True)

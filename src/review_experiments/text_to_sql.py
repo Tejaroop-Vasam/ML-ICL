@@ -2,7 +2,6 @@
 
 import json
 import re
-import shutil
 import sqlite3
 import time
 import zipfile
@@ -10,35 +9,34 @@ from collections import Counter
 from contextlib import closing
 from functools import lru_cache
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import gdown
 import requests
-from huggingface_hub import hf_hub_download
 from sqlglot import exp, parse
-from sqlglot.errors import SqlglotError
 from sqlglot.optimizer.scope import traverse_scope
 
-from .common import Job, clean_key, file_sha256, hub_revision, rng_for, round_robin_sample
+from .common import Job, clean_key, file_sha256, rng_for, round_robin_sample
 from .config import SQL_MAX_NEW
 
 SPIDER_FILE_ID = "1403EGqzIDoHMdQF4c9Bkyl7dZLZ5Wt6J"
 BIRD_DEV_URL = "https://bird-bench.oss-cn-beijing.aliyuncs.com/dev.zip"
-BIRD_DEV_MIRROR = "HAL-9001/bird-dev"
 SQL_ROW_LIMIT = 100_000
 SQL_TIMEOUT = 30
+EXTRACTED_MARKER = ".archive-extracted"
 
 
 def transfer(url, destination):
-    tmp = destination.with_suffix(destination.suffix + ".part")
-    try:
+    with TemporaryDirectory(dir=destination.parent) as directory:
+        tmp = Path(directory) / destination.name
         with requests.get(url, stream=True, timeout=(20, 120)) as response:
             response.raise_for_status()
             with tmp.open("wb") as file:
                 for block in response.iter_content(chunk_size=1024 * 1024):
                     file.write(block)
+        if not zipfile.is_zipfile(tmp):
+            raise ValueError("The benchmark download is not a ZIP archive.")
         tmp.replace(destination)
-    finally:
-        tmp.unlink(missing_ok=True)
 
 
 def extract_zip(path, root):
@@ -49,6 +47,7 @@ def extract_zip(path, root):
             if not (root / item.filename).resolve().is_relative_to(root):
                 raise ValueError(f"Invalid archive path: {item.filename}")
         archive.extractall(root)
+    (root / EXTRACTED_MARKER).touch()
 
 
 def find_file(root, names):
@@ -67,11 +66,14 @@ def read_json(path):
 
 
 def sql_data_root(config, dataset, split):
-    configured = {
-        ("spider", "dev"): config.spider_path, ("spider", "train"): config.spider_path,
-        ("bird", "dev"): config.bird_dev_path, ("bird", "train"): config.bird_train_path,
-    }[dataset, split]
-    root = config.cache_root / (dataset if dataset == "spider" else f"bird_{split}")
+    if dataset == "spider":
+        configured = config.spider_path
+        root = config.cache_root / "spider"
+        archive = root / "spider_data.zip"
+    else:
+        configured = config.bird_dev_path if split == "dev" else config.bird_train_path
+        root = config.cache_root / f"bird_{split}"
+        archive = root / "dev.zip"
     root.mkdir(parents=True, exist_ok=True)
     names = ("train_spider.json",) if dataset == "spider" and split == "train" else (f"{split}.json",)
     if configured is not None:
@@ -80,47 +82,24 @@ def sql_data_root(config, dataset, split):
             root = path
         elif path.is_file():
             root = root / file_sha256(path)[:16]
-            if not (root / ".archive-extracted").exists():
+            if not (root / EXTRACTED_MARKER).exists():
                 extract_zip(path, root)
-                (root / ".archive-extracted").touch()
         else:
             raise FileNotFoundError(path)
-    elif not find_file(root, names) or (
-        (root / ("spider_data.zip" if dataset == "spider" else "dev.zip")).exists()
-        and not (root / ".archive-extracted").exists()
-    ):
+    elif not find_file(root, names) or (archive.exists() and not (root / EXTRACTED_MARKER).exists()):
         if dataset == "spider":
-            archive = root / "spider_data.zip"
             if not archive.exists():
-                temp = root / "spider_data.part"
-                try:
+                with TemporaryDirectory(dir=root) as directory:
+                    temp = Path(directory) / archive.name
                     result = gdown.download(id=SPIDER_FILE_ID, output=str(temp), quiet=False)
                     if not result or not zipfile.is_zipfile(temp):
                         raise RuntimeError("Provide the official Spider ZIP with --spider-path.")
                     temp.replace(archive)
-                finally:
-                    temp.unlink(missing_ok=True)
             extract_zip(archive, root)
-            (root / ".archive-extracted").touch()
         elif split == "dev":
-            archive = root / "dev.zip"
-            try:
-                if not archive.exists():
-                    transfer(BIRD_DEV_URL, archive)
-                extract_zip(archive, root)
-                (root / ".archive-extracted").touch()
-            except (requests.RequestException, zipfile.BadZipFile) as exc:
-                print(f"BIRD official download unavailable ({exc}). Trying the archived dev release on Hugging Face.")
-                revision = hub_revision(BIRD_DEV_MIRROR)
-                cached = hf_hub_download(
-                    BIRD_DEV_MIRROR, "dev.zip", repo_type="dataset", revision=revision,
-                )
-                expected_sha = "cdd6d19faeb45a23970b98d3ef6c40a87987c95459c2cf12076897a60cf5a630"
-                if file_sha256(cached) != expected_sha:
-                    raise ValueError("The mirrored BIRD archive failed its published checksum.")
-                shutil.copyfile(cached, archive)
-                extract_zip(archive, root)
-                (root / ".archive-extracted").touch()
+            if not archive.exists():
+                transfer(BIRD_DEV_URL, archive)
+            extract_zip(archive, root)
         else:
             raise ValueError("Set --bird-train-path to the official BIRD training release for BIRD ICL.")
 
@@ -136,9 +115,8 @@ def sql_data_root(config, dataset, split):
         nested = find_file(root, (f"{split}_databases.zip", "databases.zip"))
         if nested is not None:
             db_root = config.cache_root / f"bird_{split}_sqlite_{file_sha256(nested)[:16]}"
-            if not (db_root / ".archive-extracted").exists():
+            if not (db_root / EXTRACTED_MARKER).exists():
                 extract_zip(nested, db_root)
-                (db_root / ".archive-extracted").touch()
     # Scope database lookup to the data split when possible.
     db_root = db_root or questions.parent
     db_paths = {
@@ -184,12 +162,8 @@ def physical_tables(tree):
 
 
 def gold_table_names(reference, schema):
-    try:
-        tables = physical_tables(parse_select(reference))
-    except (SqlglotError, ValueError):
-        return None
-    lookup = {name.casefold(): name for name in schema}
-    if not tables or not tables.issubset(lookup):
+    tables = physical_tables(parse_select(reference))
+    if not tables or not tables.issubset(name.casefold() for name in schema):
         return None
     return [name for name in schema if name.casefold() in tables]
 
@@ -231,8 +205,7 @@ def sql_jobs(config, dataset, n_eval, retriever):
             raise ValueError(f"Too few official cross-database {dataset} demonstrations.")
         train_vectors = retriever.encode([row["question"] for _, row in train_pool])
 
-    schema_vectors = {}
-    database_hash = {}
+    schema_cache = {}
     for idx, row in cases:
         sample_id = f"{dataset}_dev_{idx}"
         db_id = row["db_id"]
@@ -240,9 +213,10 @@ def sql_jobs(config, dataset, n_eval, retriever):
         if db_path is None:
             raise FileNotFoundError(f"No database for {sample_id} ({db_id}).")
         schema = db_schema(db_path)
-        if db_id not in schema_vectors:
-            schema_vectors[db_id] = retriever.encode([f"{name}\n{ddl}" for name, ddl in schema.items()])
-            database_hash[db_id] = file_sha256(db_path)
+        if db_id not in schema_cache:
+            vectors = retriever.encode([f"{name}\n{ddl}" for name, ddl in schema.items()])
+            schema_cache[db_id] = vectors, file_sha256(db_path)
+        vectors, db_sha = schema_cache[db_id]
         question, reference = row["question"], row[reference_key]
         evidence = (row.get("evidence") or "").strip()
         retrieval_query = question + ("\n" + evidence if evidence else "")
@@ -250,7 +224,9 @@ def sql_jobs(config, dataset, n_eval, retriever):
         names = list(schema)
         oracle = gold_table_names(reference, schema)
         table_count = len(oracle) if oracle else min(3, len(names))
-        ranked, scores = retriever.rank(schema_vectors[db_id], query_vector)
+        ranked, scores = retriever.rank(vectors, query_vector)
+        table_scores = dict(zip(names, map(float, scores), strict=True))
+        retriever_tokens = retriever.lengths([retrieval_query])[0]
         retrieved_tables = [names[i] for i in ranked[:table_count]]
         random_tables = rng_for(config.seed, sample_id, "tables").sample(names, table_count)
         # Canonical schema ordering in every arm keeps the comparison focused on table choice.
@@ -283,15 +259,15 @@ def sql_jobs(config, dataset, n_eval, retriever):
                 "sql", dataset, sample_id, condition, "\n\n".join(prompt_parts),
                 question, reference, SQL_MAX_NEW, db_path=db_path,
                 details={
-                    "split": "dev", "dataset_json_sha256": dev_sha, "db_sha256": database_hash[db_id],
+                    "split": "dev", "dataset_json_sha256": dev_sha, "db_sha256": db_sha,
                     "db_id": db_id, "difficulty": row.get("difficulty"),
                     "benchmark_evidence": evidence, "evidence_in_prompt": bool(cue),
                     "total_schema_tables": len(names), "schema_tables": list(selected),
                     "oracle_tables": oracle, "gold_table_count_used": oracle is not None and "matched_k" in condition,
                     "oracle_table_recall": len(set(chosen) & set(oracle)) / len(oracle) if oracle else None,
-                    "table_scores": {name: float(score) for name, score in zip(names, scores, strict=True)},
+                    "table_scores": table_scores.copy(),
                     "retriever_limit": retriever.limit,
-                    "retriever_query_tokens": retriever.lengths([retrieval_query])[0],
+                    "retriever_query_tokens": retriever_tokens,
                     "demonstration_ids": [f"{dataset}_train_{i}" for i, _ in demos],
                     "train_json_sha256": train_sha if demos else None,
                 },
@@ -318,15 +294,11 @@ def execute_sql(db_path, query):
         con.execute("PRAGMA trusted_schema=OFF")
         con.set_authorizer(authorize_sql)
         con.set_progress_handler(lambda: int(time.monotonic() >= deadline), 2000)
-        try:
-            cursor = con.execute(query)
-            rows = cursor.fetchmany(SQL_ROW_LIMIT + 1)
-            if len(rows) > SQL_ROW_LIMIT:
-                return "row_limit", None, None
-            return "ok", rows, len(cursor.description)
-        except sqlite3.Error as exc:
-            message = str(exc)
-            return ("timeout" if time.monotonic() >= deadline else message), None, None
+        cursor = con.execute(query)
+        rows = cursor.fetchmany(SQL_ROW_LIMIT + 1)
+        if len(rows) > SQL_ROW_LIMIT:
+            return "row_limit", None, None
+        return "ok", rows, len(cursor.description)
 
 
 @lru_cache(maxsize=1)
@@ -339,13 +311,7 @@ def score_sql(job, output):
     gold_status, gold_rows, gold_columns = execute_reference(job.db_path, job.reference)
     if gold_status != "ok":
         return {"prediction": prediction, "sql_status": "reference_error", "gold_error": gold_status, "is_correct": None}
-    reason = None
-    try:
-        tree = parse_select(prediction)
-    except (SqlglotError, ValueError) as exc:
-        tree, reason = None, str(exc)
-    if tree is None:
-        return {"prediction": prediction, "sql_status": "invalid_sql", "sql_error": reason, "is_correct": False}
+    tree = parse_select(prediction)
 
     status, predicted_rows, predicted_columns = execute_sql(job.db_path, prediction)
     result = {
@@ -363,10 +329,7 @@ def score_sql(job, output):
         correct = set(predicted_rows) == set(gold_rows)
         comparison = "bird_row_set"
     else:
-        try:
-            ordered = parse_select(job.reference).args.get("order") is not None
-        except (SqlglotError, ValueError):
-            return {**result, "sql_status": "reference_parse_error", "is_correct": None}
+        ordered = parse_select(job.reference).args.get("order") is not None
         matching_rows = predicted_rows == gold_rows if ordered else Counter(predicted_rows) == Counter(gold_rows)
         correct = predicted_columns == gold_columns and matching_rows
         comparison = "single_db_ordered_rows" if ordered else "single_db_row_multiset"

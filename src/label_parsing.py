@@ -1,21 +1,42 @@
-"""Label matching shared by the original evaluator and the review diagnostics."""
+"""Classification label vocabularies and response scoring."""
 
 import re
-from collections.abc import Sequence
+from functools import lru_cache
 
 
-def extract_legacy_label(output: str, labels: Sequence[str]) -> tuple[str, str]:
-    """Return the original label prediction and the match route it used."""
+SENTIMENT_LABELS = ("negative", "positive")
+TREC_LABELS = ("Description", "Entity", "Abbreviation", "Human", "Numeric", "Location")
+YAHOO_TOPICS = (
+    "Society & Culture", "Science & Mathematics", "Health", "Education & Reference",
+    "Computers & Internet", "Sports", "Business & Finance", "Entertainment & Music",
+    "Family & Relationships", "Politics & Government",
+)
+CLASSIFICATION_LABELS = {
+    "imdb": SENTIMENT_LABELS, "yelp_polarity": SENTIMENT_LABELS,
+    "trec": TREC_LABELS, "yahoo_answers": YAHOO_TOPICS,
+}
+CLASSIFICATION_SCORING = "unique_label_mention"
+
+
+@lru_cache(maxsize=None)
+def label_patterns(labels):
+    return tuple((label, re.compile(rf"\b{re.escape(label)}\b", re.IGNORECASE)) for label in labels)
+
+
+def score_classification_output(output, labels, reference):
+    """Accept one distinct candidate label anywhere in a response, without a fallback."""
     text = output.strip()
-    first_line = text.split("\n", 1)[0].strip()
-    patterns = {label: rf"\b{re.escape(label)}\b" for label in labels}
-    regions = (
-        (first_line, "^", "leading"),
-        (first_line, "", "first_line"),
-        (text, "", "later_line"),
-    )
-    for region, prefix, route in regions:
-        for label in labels:
-            if re.search(prefix + patterns[label], region, re.IGNORECASE):
-                return label, route
-    return labels[0], "defaulted_to_first_label"
+    mentions = [label for label, pattern in label_patterns(tuple(labels)) if pattern.search(text)]
+    prediction = mentions[0] if len(mentions) == 1 else None
+    if prediction is not None:
+        status = "unique_mention"
+    elif mentions:
+        status = "ambiguous"
+    else:
+        status = "no_label" if text else "empty"
+    return {
+        "prediction": prediction, "is_correct": prediction is not None and prediction == reference,
+        "mentions": mentions, "parse_status": status, "score_method": CLASSIFICATION_SCORING,
+    }
+
+

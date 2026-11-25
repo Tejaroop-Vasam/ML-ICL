@@ -1,4 +1,4 @@
-"""Shared records, deterministic sampling and BGE-M3 retrieval."""
+"""Shared records, dataset revisions, and deterministic sampling."""
 
 import hashlib
 import json
@@ -6,11 +6,8 @@ import random
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import lru_cache
+from itertools import chain, islice, zip_longest
 from pathlib import Path
-
-import numpy as np
-
-from src.retrieval import BGE_M3_ID, dense_embeddings, load_dense_encoder
 
 
 def json_text(value):
@@ -61,33 +58,18 @@ class Job:
     score_only: bool = False
 
 
-class Retriever:
-    def __init__(self, device):
-        self.model_id = BGE_M3_ID
-        self.revision = hub_revision(self.model_id, "model")
-        self.model = load_dense_encoder(self.model_id, device=device, revision=self.revision)
-        self.limit = int(self.model.max_seq_length)
-
-    def encode(self, texts):
-        return dense_embeddings(self.model, texts)
-
-    def lengths(self, texts):
-        lengths = self.model.tokenizer(
-            texts, truncation=False, add_special_tokens=True, return_length=True,
-            verbose=False,
-        )["length"]
-        return [int(n) for n in lengths]
-
-    @staticmethod
-    def rank(matrix, query):
-        scores = matrix @ query
-        return np.argsort(-scores, kind="stable").tolist(), scores
-
-
 def choose(rows, n, seed, name):
     if n is None or n >= len(rows):
         return list(rows)
     return rng_for(seed, name).sample(rows, n)
+
+
+def take_round_robin(groups, n):
+    """Take one item from each group per round, skipping exhausted groups."""
+    missing = object()
+    rounds = zip_longest(*groups, fillvalue=missing)
+    items = (row for row in chain.from_iterable(rounds) if row is not missing)
+    return list(islice(items, max(0, n)))
 
 
 def round_robin_sample(rows, n, group, seed, name):
@@ -102,11 +84,4 @@ def round_robin_sample(rows, n, group, seed, name):
     rng.shuffle(order)
     for values in groups.values():
         rng.shuffle(values)
-    sample = []
-    while len(sample) < n:
-        for key in order:
-            if groups[key]:
-                sample.append(groups[key].pop())
-                if len(sample) == n:
-                    break
-    return sample
+    return take_round_robin((reversed(groups[key]) for key in order), n)
