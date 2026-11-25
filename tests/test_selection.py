@@ -1,7 +1,12 @@
 """Unit tests for demonstration selection strategies and ordering."""
 
 import unittest
+from unittest.mock import patch
+
+import numpy as np
+
 from src.data.example import ICLExample
+from src.retrieval import BGE_M3_ID
 from src.selection import (
     RandomSelector,
     SimilaritySelector,
@@ -50,19 +55,34 @@ class TestSelectionAndOrdering(unittest.TestCase):
         last_order = order_demonstrations(demos, ordering="similar_last", similarity_scores=scores)
         self.assertEqual(last_order[-1].id, "d2")
 
-    def test_budget_aware_selector(self):
-        sel = BudgetAwareSelector(self.pool, alpha=1.0, beta=0.5, gamma=0.1, seed=42)
+    @patch("src.selection.similarity_selector.load_dense_encoder")
+    def test_budget_aware_selector(self, load_encoder):
+        load_encoder.return_value.encode.side_effect = self.fake_embeddings
+        sel = BudgetAwareSelector(self.pool, alpha=1.0, beta=0.5, gamma=0.1, seed=42, cache_dir=None)
         demos = sel.select_demonstrations(self.query, k=2, token_budget=50)
         self.assertLessEqual(len(demos), 2)
         self.assertTrue(all(isinstance(d, ICLExample) for d in demos))
+        load_encoder.assert_called_once_with(BGE_M3_ID)
 
-    def test_oracle_selector(self):
+    @patch("src.selection.similarity_selector.load_dense_encoder")
+    def test_oracle_selector(self, load_encoder):
+        load_encoder.return_value.encode.side_effect = self.fake_embeddings
         sel = OracleSelector(self.pool, mode="balanced_relevant", seed=42)
+        sel._get_similarity_selector().cache_dir = None
         demos = sel.select_demonstrations(self.query, k=2)
         self.assertEqual(len(demos), 2)
         # Should have both classes represented (balanced)
         labels = {d.label for d in demos}
         self.assertEqual(labels, {0, 1})
+        load_encoder.assert_called_once_with(BGE_M3_ID)
+
+    @staticmethod
+    def fake_embeddings(texts, **kwargs):
+        positive = ("great", "wonderful", "loved")
+        return np.asarray([
+            [1.0, 0.0] if any(word in text for word in positive) else [0.0, 1.0]
+            for text in texts
+        ], dtype=np.float32)
 
 
 if __name__ == "__main__":

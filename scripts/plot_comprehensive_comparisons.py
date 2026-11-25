@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate cross-dataset comparison plots for each experiment:
+Rebuild cross-dataset comparison plots from the archived experiment results:
   1. Single Model Across Datasets (evaluating all 3 conditions)
   2. Across All Models (0.6B, 1.7B, 4B, 8B) across all datasets
   3. Composite Side-by-Side / Stacked Figures for inclusion in presentation slides

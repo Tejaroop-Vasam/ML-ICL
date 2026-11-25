@@ -107,7 +107,7 @@ def class_jobs(config, dataset, n_eval, retriever, codec):
         vectors = retriever.encode(query_texts)
         lengths = retriever.lengths(query_texts)
 
-        for row, query_vector, mini_length in zip(batch, vectors, lengths, strict=True):
+        for row, query_vector, query_length in zip(batch, vectors, lengths, strict=True):
             query, gold, sample_id = row.text, row.label_name, row.id
             ranked, scores = retriever.rank(pool_vectors, query_vector)
             key = clean_key(query)
@@ -125,8 +125,8 @@ def class_jobs(config, dataset, n_eval, retriever, codec):
                     visible_query, gold, limit, mode=mode, labels=labels, score_only=score,
                     details={
                         "source_revision": revision, "split": "test",
-                        "retriever_query_tokens": mini_length, "retriever_limit": retriever.limit,
-                        "retriever_query_truncated": mini_length > retriever.limit,
+                        "retriever_query_tokens": query_length, "retriever_limit": retriever.limit,
+                        "retriever_query_truncated": query_length > retriever.limit,
                         "demonstrations": [
                             {"id": pool[i].id, "label": pool[i].label_name, "score": float(scores[i]),
                              "retriever_tokens": pool_lengths[i], "retriever_truncated": pool_lengths[i] > retriever.limit}
@@ -156,7 +156,7 @@ def class_jobs(config, dataset, n_eval, retriever, codec):
 
             for k in sorted(set(config.k_sweep) | {config.reference_k}):
                 selected = available[:k]
-                yield job(f"minilm_k{k}", selected[::-1], instruction=strict)
+                yield job(f"bge_m3_k{k}", selected[::-1], instruction=strict)
             for seed in config.random_seeds:
                 chosen = rng_for(config.seed, dataset, sample_id, "random", seed).sample(available, config.reference_k)
                 yield job(f"random_k{config.reference_k}_seed{seed}", chosen, instruction=strict,
@@ -173,7 +173,7 @@ def class_jobs(config, dataset, n_eval, retriever, codec):
                         balanced.append(candidates.pop(0))
                         if len(balanced) == config.reference_k:
                             break
-            yield job(f"balanced_minilm_k{config.reference_k}", sorted(balanced, key=lambda i: scores[i]),
+            yield job(f"balanced_bge_m3_k{config.reference_k}", sorted(balanced, key=lambda i: scores[i]),
                       instruction=strict)
             if dataset == "imdb":
                 oracle = [i for i in available if pool[i].label_name == gold][:config.reference_k]
@@ -181,5 +181,5 @@ def class_jobs(config, dataset, n_eval, retriever, codec):
                     yield job(f"label_informed_oracle_k{config.reference_k}", oracle[::-1], instruction=strict,
                               extras={"uses_query_gold": True})
                 chosen = available[:config.reference_k]
-                yield job(f"minilm_similar_first_k{config.reference_k}", chosen, instruction=strict)
-                yield job(f"minilm_structured_k{config.reference_k}", chosen[::-1], instruction=strict, structured=True)
+                yield job(f"bge_m3_similar_first_k{config.reference_k}", chosen, instruction=strict)
+                yield job(f"bge_m3_structured_k{config.reference_k}", chosen[::-1], instruction=strict, structured=True)

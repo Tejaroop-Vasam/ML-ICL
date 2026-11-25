@@ -9,6 +9,7 @@ from typing import List, Optional, Tuple, Dict
 import numpy as np
 
 from src.data.example import ICLExample
+from src.retrieval import BGE_M3_ID
 from src.selection.similarity_selector import SimilaritySelector
 from src.selection.ordering import order_demonstrations
 
@@ -28,7 +29,7 @@ class BudgetAwareSelector(SimilaritySelector):
         beta: float = 0.5,     # Weight for diversity relative to chosen set
         gamma: float = 0.2,    # Penalty weight for token length cost
         token_budget: Optional[int] = None, # Total token limit for demonstrations
-        model_name: str = "all-MiniLM-L6-v2",
+        model_name: str = BGE_M3_ID,
         cache_dir: Optional[str] = "data/cache/embeddings",
         seed: int = 42,
     ):
@@ -66,12 +67,7 @@ class BudgetAwareSelector(SimilaritySelector):
 
         effective_budget = token_budget if token_budget is not None else self.token_budget
 
-        model = self._get_model()
-        query_emb = model.encode(
-            [test_example.text],
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-        )[0]
+        query_emb = self._query_embedding(test_example)
 
         candidate_embs = self.get_candidate_embeddings()
         rel_scores = np.dot(candidate_embs, query_emb)

@@ -6,11 +6,12 @@ DATASETS ?= imdb
 N_EVAL   ?= 30
 K        ?= 4
 
-.PHONY: help install run_all run_all_models run_0.6b run_1.7b run_4b run_8b npz profile test exp1 exp2 exp4 exp5 proposed plot oracle complex qualitative report ppt review_artifacts clean
+.PHONY: help install install_review run_all run_all_models run_0.6b run_1.7b run_4b run_8b npz profile test exp1 exp2 exp4 exp5 proposed plot oracle complex qualitative report ppt review_artifacts clean
 
 help:
 	@echo "Available commands:"
 	@echo "  make install         - Install all required Python packages"
+	@echo "  make install_review  - Install the reviewer runner dependencies on a GPU runtime"
 	@echo "  make run_0.6b        - Run all experiments on Qwen3-0.6B"
 	@echo "  make run_1.7b        - Run all experiments on Qwen3-1.7B"
 	@echo "  make run_4b          - Run all experiments on Qwen3-4B"
@@ -20,23 +21,26 @@ help:
 	@echo "                         Usage: make run_all_models N_EVAL=30 K=4"
 	@echo "  make npz             - Convert and cache all datasets into compressed NumPy .npz"
 	@echo "  make profile         - Profile prompt token length vs Qwen3 32K context window"
-	@echo "  make oracle          - Run Oracle vs MiniLM study disentangling retriever vs LLM"
-	@echo "  make complex         - Run evaluation on Spider, BIRD, and Long-Answer tasks"
-	@echo "  make qualitative     - Run rigorous qualitative error analysis & case studies"
+	@echo "  make oracle          - Run classification retrieval controls with BGE-M3"
+	@echo "  make complex         - Run Spider, BIRD, and CLAPNQ with BGE-M3"
+	@echo "  make qualitative     - Export annotations from saved reviewer runs"
 	@echo "  make test            - Run the complete unit test suite"
 	@echo "  make exp1            - Run Experiment 1: Baselines (Zero-Shot vs Random vs Similarity)"
 	@echo "  make exp2            - Run Experiment 2: Demonstration count (k-sweep)"
 	@echo "  make exp4            - Run Experiment 4: Demonstration ordering study"
 	@echo "  make exp5            - Run Experiment 5: Demonstration formatting study"
 	@echo "  make proposed        - Run Proposed Method: Budget-aware selection on IMDb"
-	@echo "  make plot            - Generate publication-ready figures for all results in results/"
-	@echo "  make ppt             - Generate 18-slide PowerPoint presentation with Review Responses"
-	@echo "  make report          - Generate comprehensive Word report with Review Responses"
-	@echo "  make review_artifacts- Build all figures, slides, and Word reports addressing reviews"
+	@echo "  make plot            - Plot saved BGE-M3 classification results"
+	@echo "  make ppt             - Rebuild the archived presentation"
+	@echo "  make report          - Rebuild the archived Word report"
+	@echo "  make review_artifacts- Rebuild archived figures and reports"
 	@echo "  make clean           - Remove cached embeddings and Python bytecode"
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
+
+install_review:
+	$(PYTHON) -m pip install -r requirements-review.txt
 
 run_all:
 	$(PYTHON) scripts/run_all_experiments.py --models $(MODELS) --datasets $(DATASETS) --n_eval $(N_EVAL) --k $(K)
@@ -92,8 +96,6 @@ qualitative:
 
 plot:
 	$(PYTHON) scripts/run_all_experiments.py --plot_only
-	$(PYTHON) scripts/plot_summary.py
-	$(PYTHON) scripts/plot_comprehensive_comparisons.py
 
 ppt:
 	$(PYTHON) scripts/generate_ppt.py
@@ -101,8 +103,11 @@ ppt:
 report:
 	$(PYTHON) scripts/generate_word_report.py
 
-review_artifacts: profile oracle complex qualitative plot ppt report
-	@echo "All review-driven artifacts, plots, slides, and reports successfully built!"
+review_artifacts:
+	$(PYTHON) scripts/run_all_experiments.py --plot_only --out_dir results
+	$(PYTHON) scripts/plot_summary.py
+	$(PYTHON) scripts/plot_comprehensive_comparisons.py
+	$(MAKE) ppt report
 
 clean:
 	rm -rf data/cache/embeddings/*.npy

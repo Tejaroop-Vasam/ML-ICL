@@ -2,7 +2,7 @@
 
 Provides ground-truth aligned, class-balanced, or gold-relevant demonstrations
 from the candidate pool to serve as an empirical upper bound, isolating retrieval
-errors (e.g., MiniLM topical clustering, truncation) from LLM reasoning limits.
+errors in BGE-M3 ranking from LLM reasoning limits.
 """
 
 import logging
@@ -10,6 +10,7 @@ from typing import List, Optional, Dict
 import numpy as np
 
 from src.data.example import ICLExample
+from src.retrieval import BGE_M3_ID
 from src.selection.base_selector import BaseSelector
 from src.selection.ordering import order_demonstrations
 
@@ -30,7 +31,7 @@ class OracleSelector(BaseSelector):
         self,
         candidate_pool: List[ICLExample],
         mode: str = "balanced_relevant",
-        model_name: str = "all-MiniLM-L6-v2",
+        model_name: str = BGE_M3_ID,
         seed: int = 42,
     ):
         super().__init__(candidate_pool, seed)

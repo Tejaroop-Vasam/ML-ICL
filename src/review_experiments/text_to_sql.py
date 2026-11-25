@@ -251,12 +251,12 @@ def sql_jobs(config, dataset, n_eval, retriever):
         oracle = gold_table_names(reference, schema)
         table_count = len(oracle) if oracle else min(3, len(names))
         ranked, scores = retriever.rank(schema_vectors[db_id], query_vector)
-        minilm = [names[i] for i in ranked[:table_count]]
+        retrieved_tables = [names[i] for i in ranked[:table_count]]
         random_tables = rng_for(config.seed, sample_id, "tables").sample(names, table_count)
         # Canonical schema ordering in every arm keeps the comparison focused on table choice.
         chosen_modes = [
             ("full_schema", names, evidence, []),
-            ("minilm_schema_matched_k", minilm, evidence, []),
+            ("bge_m3_schema_matched_k", retrieved_tables, evidence, []),
             ("random_schema_matched_k", random_tables, evidence, []),
         ]
         if oracle:
@@ -268,7 +268,7 @@ def sql_jobs(config, dataset, n_eval, retriever):
             eligible = [i for i in demo_ranking if clean_key(train_pool[i][1]["question"]) != clean_key(question)]
             if len(eligible) >= config.sql_demo_k:
                 demos = [train_pool[i] for i in eligible[:config.sql_demo_k][::-1]]
-                chosen_modes.append((f"full_schema_minilm_icl_k{config.sql_demo_k}", names, evidence, demos))
+                chosen_modes.append((f"full_schema_bge_m3_icl_k{config.sql_demo_k}", names, evidence, demos))
 
         for condition, chosen, cue, demos in chosen_modes:
             prompt_parts = [instruction]

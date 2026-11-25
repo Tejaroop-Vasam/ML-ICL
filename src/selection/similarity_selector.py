@@ -1,12 +1,14 @@
 """Similarity-based demonstration selection using dense sentence embeddings."""
 
-import os
 import logging
+import hashlib
+import json
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 import numpy as np
 
 from src.data.example import ICLExample
+from src.retrieval import BGE_M3_ID, dense_embeddings, load_dense_encoder
 from src.selection.base_selector import BaseSelector
 from src.selection.ordering import order_demonstrations
 
@@ -19,7 +21,7 @@ class SimilaritySelector(BaseSelector):
     def __init__(
         self,
         candidate_pool: List[ICLExample],
-        model_name: str = "all-MiniLM-L6-v2",
+        model_name: str = BGE_M3_ID,
         cache_dir: Optional[str] = "data/cache/embeddings",
         seed: int = 42,
     ):
@@ -29,20 +31,18 @@ class SimilaritySelector(BaseSelector):
         self._model = None
         self._candidate_embeddings: Optional[np.ndarray] = None
         self._query_cache: dict = {}
+        self._pool_indices = {(item.id, item.text): index for index, item in enumerate(candidate_pool)}
 
     def _get_model(self):
         if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            import torch
-            if torch.cuda.is_available():
-                device = "cuda"
-            elif torch.backends.mps.is_available():
-                device = "mps"
-            else:
-                device = "cpu"
-            logger.info(f"Loading SentenceTransformer '{self.model_name}' on device '{device}'...")
-            self._model = SentenceTransformer(self.model_name, device=device)
+            self._model = load_dense_encoder(self.model_name)
         return self._model
+
+    def _query_embedding(self, example):
+        key = (example.id, example.text)
+        if key not in self._query_cache:
+            self._query_cache[key] = dense_embeddings(self._get_model(), [example.text])[0]
+        return self._query_cache[key]
 
     def get_candidate_embeddings(self) -> np.ndarray:
         """Compute or load cached normalized embeddings for all candidates."""
@@ -54,16 +54,19 @@ class SimilaritySelector(BaseSelector):
         if self.cache_dir and self.candidate_pool:
             dataset_name = self.candidate_pool[0].dataset
             clean_model = self.model_name.replace("/", "_")
-            pool_hash = f"{dataset_name}_{len(self.candidate_pool)}_{clean_model}.npy"
+            pool_data = json.dumps([(item.id, item.text) for item in self.candidate_pool])
+            fingerprint = hashlib.sha256(pool_data.encode("utf-8")).hexdigest()[:16]
+            pool_hash = f"{dataset_name}_{clean_model}_{fingerprint}.npy"
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file = self.cache_dir / pool_hash
 
             if cache_file.exists():
                 try:
                     logger.info(f"Loading cached embeddings from {cache_file}...")
-                    self._candidate_embeddings = np.load(cache_file)
-                    if len(self._candidate_embeddings) == len(self.candidate_pool):
-                        return self._candidate_embeddings
+                    cached = np.load(cache_file)
+                    if cached.ndim == 2 and len(cached) == len(self.candidate_pool):
+                        self._candidate_embeddings = cached
+                        return cached
                 except Exception as e:
                     logger.warning(f"Failed to load cached embeddings: {e}. Recomputing.")
 
@@ -71,12 +74,7 @@ class SimilaritySelector(BaseSelector):
         model = self._get_model()
         texts = [c.text for c in self.candidate_pool]
         logger.info(f"Encoding {len(texts)} candidate demonstrations with {self.model_name}...")
-        embeddings = model.encode(
-            texts,
-            show_progress_bar=len(texts) > 200,
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-        )
+        embeddings = dense_embeddings(model, texts, show_progress=len(texts) > 200)
         self._candidate_embeddings = embeddings
 
         if cache_file:
@@ -102,16 +100,7 @@ class SimilaritySelector(BaseSelector):
         if k <= 0 or not self.candidate_pool:
             return []
 
-        if test_example.id in self._query_cache:
-            query_emb = self._query_cache[test_example.id]
-        else:
-            model = self._get_model()
-            query_emb = model.encode(
-                [test_example.text],
-                normalize_embeddings=True,
-                convert_to_numpy=True,
-            )[0]
-            self._query_cache[test_example.id] = query_emb
+        query_emb = self._query_embedding(test_example)
 
         candidate_embs = self.get_candidate_embeddings()
         # Cosine similarity is simple dot product since vectors are L2-normalized
@@ -138,23 +127,14 @@ class SimilaritySelector(BaseSelector):
         """Compute cosine similarity scores between test example and a candidate subset."""
         if not candidates:
             return np.array([])
-        model = self._get_model()
-        if test_example.id in self._query_cache:
-            query_emb = self._query_cache[test_example.id]
+        query_emb = self._query_embedding(test_example)
+        candidate_keys = [(item.id, item.text) for item in candidates]
+        if all(key in self._pool_indices for key in candidate_keys):
+            cand_embs = self.get_candidate_embeddings()[[self._pool_indices[key] for key in candidate_keys]]
         else:
-            query_emb = model.encode([test_example.text], normalize_embeddings=True, convert_to_numpy=True)[0]
-            self._query_cache[test_example.id] = query_emb
-
-        cand_texts = [c.text for c in candidates]
-        cand_embs = model.encode(cand_texts, normalize_embeddings=True, convert_to_numpy=True)
+            cand_embs = dense_embeddings(self._get_model(), [item.text for item in candidates])
         return np.dot(cand_embs, query_emb)
 
     def compute_similarity_score(self, demo: ICLExample, test_example: ICLExample) -> float:
         """Compute cosine similarity between a single demo and test example."""
-        model = self._get_model()
-        embs = model.encode(
-            [demo.text, test_example.text],
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-        )
-        return float(np.dot(embs[0], embs[1]))
+        return float(self.compute_similarity_scores(test_example, [demo])[0])

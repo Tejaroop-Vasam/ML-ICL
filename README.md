@@ -70,7 +70,7 @@ The initial phase systematically unpacks *when*, *why*, and *how* demonstrations
 Measure zero-shot and few-shot performance across all datasets:
 * **Zero-Shot ($k=0$):** Inherent task prior of the model without demonstrations.
 * **Random Demonstration Selection:** Uniformly sampled demonstrations across multiple fixed random seeds (to account for high variance).
-* **Semantic Similarity Retrieval:** Retrieve $k$ nearest neighbors from the training set based on cosine similarity of text embeddings (e.g., `text-embedding-3-small` or `all-mpnet-base-v2`).
+* **Semantic Similarity Retrieval:** Retrieve $k$ nearest neighbors from the training set using cosine similarity with `BAAI/bge-m3` embeddings.
 
 ### Experiment 2: Demonstration Scaling ($k$-Shot Curves)
 Evaluate model accuracy and Macro-F1 across demonstration counts:
@@ -185,39 +185,16 @@ Phase 5: Final Report & Ablation Studies
 
 ---
 
-## 🎯 Reviewer Feedback Resolutions & Advanced Diagnostics
+## Reviewer experiments
 
-In response to peer review feedback, this repository incorporates five comprehensive diagnostic suites:
+The [reviewer runner](docs/reviewer_experiments.md) uses **BGE-M3** for dense cosine retrieval across classification, Spider, BIRD, and CLAPNQ. BGE-M3 can embed up to 8,192 tokens per query or candidate. The runner counts the exact Qwen3 prompt tokens separately against the model's native 32,768-token window.
 
-### 1. Prompt Length Accounting vs. Qwen3's 32K Context Window (Review 2 #1)
-- **Token Accounting**: Exact prompt token distributions across $k \in \{0, 2, 4, 8\}$ were profiled using the native BPE tokenizer.
-- **Empirical Utilization**:
-  - `trec`: 41.2 ($k=0$) to 189.2 tokens ($k=8$) — **0.13% to 0.58%** of 32K window.
-  - `yahoo_answers`: 167.4 ($k=0$) to 1,076.4 tokens ($k=8$) — **0.51% to 3.28%** of 32K window.
-  - `yelp_polarity`: 205.3 ($k=0$) to 1,010.3 tokens ($k=8$) — **0.63% to 3.08%** of 32K window.
-  - `imdb`: 272.0 ($k=0$) to 2,240.0 tokens ($k=8$) — **0.83% to 6.84%** of 32K window.
-- **Conclusion**: Context window saturation is **not** a plausible bottleneck for classification tasks, as prompts occupy $<7\%$ of Qwen3's 32,768-token capacity. Run: `make profile`.
+- **Classification** compares zero-shot, random demonstrations, BGE-M3 demonstrations, and label-balanced selection. The IMDb controls examine output parsing, label preference, and the location of sentiment cues.
+- **Spider and BIRD** evaluate executable SQL using full schemas, retrieved tables, and tables derived from the reference query. BIRD also tests the effect of its domain evidence.
+- **CLAPNQ** compares retrieved and benchmark passages for long-answer generation. The stress test varies prompt length and the position of the relevant passage.
+- **Qualitative review** uses the saved prompts, predictions, scores, and blinded annotation packets from the run.
 
-### 2. Deep-Dive: IMDb Zero-Shot Performance Anomaly (~200 Tokens) (Review 2 #2 & #5)
-- **Root Cause 1 (Verbalizer Preamble & Extraction Fallback)**: High-capacity decoders (Qwen3-8B) unprompted by demonstrations emit conversational commentary (*"This review expresses a positive appraisal..."*). Greedy extraction falls back to class 0 (`"negative"`), artificially forcing 50.0% accuracy.
-- **Root Cause 2 (Plot Narrative Affect vs. Stance)**: Movie reviews describe dark, violent story elements while praising film craft. Uncalibrated priors anchor onto negative adjectives.
-- **In-Context Calibration**: Adding just $k=2$ demonstrations anchors output generation to `Sentiment: positive`, immediately surging Qwen3-8B accuracy from **50.0% to 96.7%**!
-
-### 3. Disentangling Retriever (MiniLM) vs. LLM (Qwen3) Bottlenecks (Review 2 #4)
-- **Oracle / Gold Benchmark**: Compares Zero-Shot vs. Random vs. MiniLM-kNN vs. Gold Oracle Demonstration Selection (`src/selection/oracle_selector.py`).
-- **Decomposition**:
-  - $\Delta_{\text{Retriever}} = \text{Accuracy}_{\text{Oracle}} - \text{Accuracy}_{\text{MiniLM}}$: Accounts for a **+13.3%** accuracy penalty on Qwen3-0.6B IMDb due to MiniLM topical false-positive clustering and 256-token truncation.
-  - $\Delta_{\text{LLM}} = 100\% - \text{Accuracy}_{\text{Oracle}}$: Drops to **0.0%** on Qwen3-4B and 8B (attaining 100% on IMDb and Yelp).
-- **Conclusion**: Qwen3's underlying reasoning capacity is near-perfect; retriever noise was indeed the primary bottleneck. Run: `make oracle`.
-
-### 4. Complex Long-Context Tasks: Spider, BIRD, & Long Answer QA (Review 1 & Review 2 #3)
-- Evaluates real long-context prompts (3,000 to 5,500+ tokens):
-  - **Spider Text-to-SQL (~2.9k tokens at $k=4$)**: Qwen3-8B achieves **83.3%** under similarity retrieval and **91.7%** under Oracle retrieval.
-  - **BIRD Benchmark (~5.3k tokens at $k=4$)**: Multi-table dirty relational schemas + domain evidence; Qwen3-8B achieves **70.0%** similarity and **80.0%** Oracle accuracy.
-  - **Long-Answer Reasoning QA (~4.1k tokens at $k=4$)**: Multi-paragraph document QA; Qwen3-8B achieves **88.9%** similarity and **100.0%** Oracle accuracy. Run: `make complex`.
-
-### 5. Rigorous Qualitative Error Analysis & Taxonomy (Review 1 & Review 2 #5)
-- Documented 5 verbatim case studies covering majority label collapse, narrative plot affect misdirection, recency decay in compact models, syntax boundary leakage, and long-context schema linking. Run: `make qualitative`.
+The [Colab launcher](ML_ICL_Reviewer_Experiments.ipynb) starts with a Qwen3-8B pilot. New classification summaries go to `results/bge_m3/`. The reviewer runner writes per-trial results and checkpoints to `ml_icl_review_runs/`. The other checked-in results, figures, slide deck, and report are historical artifacts.
 
 ---
 
@@ -249,7 +226,7 @@ ML-ICL/
 │   └── generate_word_report.py             # Academic Word report compiler
 └── src/                                    # Modular core library
     ├── data/                               # Data loaders (including Spider, BIRD, Long Answer)
-    ├── selection/                          # Random, MiniLM-kNN, Budget-Aware, and Oracle selectors
+    ├── selection/                          # Random, BGE-M3 kNN, Budget-Aware, and Oracle selectors
     ├── models/                             # Qwen3 HuggingFace inference runners
     └── evaluation/                         # Evaluation harness & classification metrics
 ```
@@ -265,15 +242,18 @@ make test
 # Profile prompt token lengths vs Qwen3 32K context window
 make profile
 
-# Run Oracle vs MiniLM retrieval disentanglement study
+# Install the reviewer runner dependencies on a GPU runtime
+make install_review
+
+# Run the classification retrieval controls with BGE-M3
 make oracle
 
 # Run complex long-context benchmarks (Spider, BIRD, Long Answer QA)
 make complex
 
-# Run qualitative error analysis & generate case studies
+# Export annotation packets from saved reviewer runs
 make qualitative
 
-# Generate all publication figures, slides, and Word reports
-make review_artifacts
+# Plot saved BGE-M3 classification summaries
+make plot
 ```

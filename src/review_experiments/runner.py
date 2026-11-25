@@ -14,7 +14,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from .artifacts import Checkpoint
 from .classification import CLASS_SOURCES, class_jobs, classification_prompt, label_paths
-from .common import MINILM_ID, digest, hub_revision, json_text
+from .common import digest, hub_revision, json_text
 from .config import CLASS_DATASETS, CLASS_MAX_NEW, NATIVE_WINDOW, QA_MAX_NEW, SQL_DATASETS, SQL_MAX_NEW, WEIGHT_MODES
 from .long_answer import CLAPNQ_ID, qa_jobs, qa_score
 from .text_to_sql import SQL_ROW_LIMIT, SQL_TIMEOUT, score_sql, sql_jobs
@@ -156,12 +156,12 @@ def manifest_for(config, model_id, weights, revision, retriever):
         source_ids.append(CLAPNQ_ID)
     return {
         **params,
-        "experiment_version": "1.1",
+        "experiment_version": "1.2",
         "model_id": model_id, "model_revision": revision, "weights": weights,
         "native_window": NATIVE_WINDOW, "chat_thinking": False,
         "fixed_data_revisions": {repo: hub_revision(repo) for repo in source_ids},
-        "retriever_id": MINILM_ID, "retriever_revision": retriever.revision,
-        "minilm_max_seq_length": retriever.limit,
+        "retriever_id": retriever.model_id, "retriever_revision": retriever.revision,
+        "retriever_max_seq_length": retriever.limit,
         "sql_row_limit": SQL_ROW_LIMIT, "sql_timeout_seconds": SQL_TIMEOUT,
         "generation_budgets": {"classification": CLASS_MAX_NEW, "sql": SQL_MAX_NEW, "qa": QA_MAX_NEW},
         "gpu": torch.cuda.get_device_name(0) if not config.profile_only else None,
@@ -196,6 +196,7 @@ def evaluate_trial(config, job, codec, runner, checkpoint, manifest):
         "trial_id": trial_id, "dataset": job.dataset, "task": job.task, "sample_id": job.sample_id,
         "condition": job.condition, "model_id": manifest["model_id"], "model_revision": manifest["model_revision"],
         "weight_mode": manifest["weights"], "prompt_mode": job.mode,
+        "retriever_id": manifest["retriever_id"],
         "query": job.query, "query_tokens": codec.count(job.query), "reference": job.reference,
         "prompt_sha256": prompt_sha, "prompt_tokens": prompt_tokens,
         "native_context_tokens": NATIVE_WINDOW, "prompt_pct_of_native": 100 * prompt_tokens / NATIVE_WINDOW,

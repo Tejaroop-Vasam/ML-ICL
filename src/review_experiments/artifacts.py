@@ -61,52 +61,54 @@ def stream_trials(connection):
         yield json.loads(payload)
 
 
-def data_anchors(row, reference_k):
+def data_anchors(row, reference_k, dense_prefix):
     condition = row["condition"]
     if row["task"] == "classification":
         return condition in {
             "legacy_raw_16", "chat_label_only_16", "chat_label_only_scores",
-            f"minilm_k{reference_k}", f"balanced_minilm_k{reference_k}",
+            f"{dense_prefix}_k{reference_k}", f"balanced_{dense_prefix}_k{reference_k}",
             f"label_informed_oracle_k{reference_k}",
         }
     if row["task"] == "sql":
-        return condition in {"full_schema", "minilm_schema_matched_k", "oracle_schema"}
-    return condition in {"minilm_passage", "gold_passage"}
+        return condition in {"full_schema", f"{dense_prefix}_schema_matched_k", "oracle_schema"}
+    return condition in {f"{dense_prefix}_passage", "gold_passage"}
 
 
-def case_stratum(variants, reference_k):
+def case_stratum(variants, reference_k, dense_prefix):
     rows = {row["condition"]: row for row in variants}
     first = variants[0]
     if first["task"] == "classification":
         legacy = rows.get("legacy_raw_16", {})
         label_only = rows.get("chat_label_only_16", {})
-        minilm = rows.get(f"minilm_k{reference_k}", {})
-        balanced = rows.get(f"balanced_minilm_k{reference_k}", {})
+        dense = rows.get(f"{dense_prefix}_k{reference_k}", {})
+        balanced = rows.get(f"balanced_{dense_prefix}_k{reference_k}", {})
         if legacy.get("legacy_parser_route") == "defaulted_to_first_label":
             return "legacy_parser_default"
         if legacy.get("legacy_correct") != label_only.get("is_correct"):
             return "legacy_vs_label_only_disagreement"
-        if minilm.get("is_correct") != balanced.get("is_correct"):
+        if dense.get("is_correct") != balanced.get("is_correct"):
             return "demo_selection_disagreement"
         return "agreement"
     if first["task"] == "sql":
-        mini = rows.get("minilm_schema_matched_k", {})
+        dense = rows.get(f"{dense_prefix}_schema_matched_k", {})
         oracle = rows.get("oracle_schema", {})
-        if mini and oracle and mini.get("is_correct") != oracle.get("is_correct"):
+        if dense and oracle and dense.get("is_correct") != oracle.get("is_correct"):
             return "schema_arm_disagreement"
         if oracle.get("is_correct") is False:
             return "oracle_sql_failure"
         return "agreement"
-    if rows.get("minilm_passage", {}).get("gold_passage_available") is False:
+    if rows.get(f"{dense_prefix}_passage", {}).get("gold_passage_available") is False:
         return "gold_passage_missed"
     return "passage_recovered"
 
 
 def write_annotation_packets(connection, run_dir, configuration):
     seed, reference_k = configuration["seed"], configuration["reference_k"]
+    # Match the stored condition names when exporting an earlier checkpoint.
+    dense_prefix = "minilm" if configuration.get("experiment_version") == "1.1" else "bge_m3"
     grouped = defaultdict(lambda: defaultdict(list))
     for row in stream_trials(connection):
-        if row["status"] == "ok" and data_anchors(row, reference_k):
+        if row["status"] == "ok" and data_anchors(row, reference_k, dense_prefix):
             grouped[row["dataset"]][row["sample_id"]].append(row)
 
     annotations_path = run_dir / "blind_annotations.jsonl"
@@ -127,10 +129,12 @@ def write_annotation_packets(connection, run_dir, configuration):
             from_other = [sample_id for sample_id in ids if sample_id not in set(random_ids)]
             targeted = round_robin_sample(
                 from_other, ANNOTATION_TARGETED_PER_DATASET,
-                lambda sample_id: case_stratum(cases[sample_id], reference_k), seed, dataset + "/annotation targeted",
+                lambda sample_id: case_stratum(cases[sample_id], reference_k, dense_prefix),
+                seed, dataset + "/annotation targeted",
             )
             for sample_id in random_ids + targeted:
                 variants = cases[sample_id]
+                stratum = case_stratum(variants, reference_k, dense_prefix) if sample_id in targeted else None
                 case_id = digest(json_text([run_dir.name, dataset, sample_id]))[:20]
                 order = sorted(variants, key=lambda row: row["trial_id"])
                 rng_for(seed, case_id).shuffle(order)
@@ -148,7 +152,7 @@ def write_annotation_packets(connection, run_dir, configuration):
                         "annotation_id": annotation_id, "trial_id": row["trial_id"],
                         "sample_id": sample_id, "condition": row["condition"], "prompt_sha256": row["prompt_sha256"],
                         "sampling_cohort": "random" if sample_id in random_ids else "targeted",
-                        "targeted_stratum": case_stratum(variants, reference_k) if sample_id in targeted else None,
+                        "targeted_stratum": stratum,
                     }) + "\n")
                     writer.writerow([annotation_id] + [""] * 11)
 

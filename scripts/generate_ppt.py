@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate a publication-grade 18-slide PowerPoint presentation (.pptx)
-for the In-Context Learning (ICL) Empirical Benchmarking experiment,
-incorporating rigorous responses to Review 1 and Review 2.
+Rebuild the archived 18-slide presentation from the original result files.
 
 Structure:
   Part 1 (Slides 2-3):

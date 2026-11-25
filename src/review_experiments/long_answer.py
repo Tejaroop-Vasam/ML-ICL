@@ -158,11 +158,11 @@ def qa_jobs(config, n_eval, retriever, codec):
             )
 
         yield job("no_passage", [])
-        yield job("minilm_passage", [pool[ranked[0]]], extras={"candidate_ranking": candidate_rows})
+        yield job("bge_m3_passage", [pool[ranked[0]]], extras={"candidate_ranking": candidate_rows})
         yield job("random_passage", [pool[random_index]])
         yield job("gold_passage", [row])
         if demos:
-            yield job(f"minilm_passage_icl_k{config.qa_demo_k}", [pool[ranked[0]]], demos=demos)
+            yield job(f"bge_m3_passage_icl_k{config.qa_demo_k}", [pool[ranked[0]]], demos=demos)
             yield job(f"gold_passage_icl_k{config.qa_demo_k}", [row], demos=demos)
         if sample_id in stress_cases:
             ordered = rng_for(config.seed, "clapnq", sample_id, "stress distractors").sample(distractors, len(distractors))

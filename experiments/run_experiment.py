@@ -18,6 +18,7 @@ for _mod in ("torchvision", "torchaudio"):
     sys.modules[_mod] = None
 
 from src.data import get_dataset, list_datasets
+from src.retrieval import BGE_M3_ID
 from src.selection import (
     RandomSelector,
     SimilaritySelector,
@@ -37,7 +38,7 @@ logger = logging.getLogger("icl_experiments")
 def save_results(results: Dict[str, Any], output_path: Path):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
+        json.dump({**results, "retriever_id": BGE_M3_ID}, f, indent=2, ensure_ascii=False)
     logger.info(f"Saved experiment results to {output_path}")
 
 
@@ -321,7 +322,7 @@ def main():
     parser.add_argument("--ordering", type=str, default="similar_last", choices=["similar_last", "similar_first", "random", "fixed_reference"])
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 101, 2024], help="Random seeds for multi-run variance")
     parser.add_argument("--custom_k", type=str, default=None, help="Comma-separated list of k values for k_sweep")
-    parser.add_argument("--output_dir", type=str, default="results")
+    parser.add_argument("--output_dir", type=str, default="results/bge_m3")
 
     args = parser.parse_args()
 

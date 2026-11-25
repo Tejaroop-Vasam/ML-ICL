@@ -1,4 +1,4 @@
-"""Shared records, deterministic sampling and MiniLM retrieval."""
+"""Shared records, deterministic sampling and BGE-M3 retrieval."""
 
 import hashlib
 import json
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-MINILM_ID = "sentence-transformers/all-MiniLM-L6-v2"
+from src.retrieval import BGE_M3_ID, dense_embeddings, load_dense_encoder
 
 
 def json_text(value):
@@ -63,20 +63,13 @@ class Job:
 
 class Retriever:
     def __init__(self, device):
-        from sentence_transformers import SentenceTransformer
-
-        self.revision = hub_revision(MINILM_ID, "model")
-        self.model = SentenceTransformer(
-            MINILM_ID, revision=self.revision,
-            device=device,
-        )
+        self.model_id = BGE_M3_ID
+        self.revision = hub_revision(self.model_id, "model")
+        self.model = load_dense_encoder(self.model_id, device=device, revision=self.revision)
         self.limit = int(self.model.max_seq_length)
 
     def encode(self, texts):
-        return self.model.encode(
-            texts, batch_size=64, normalize_embeddings=True,
-            convert_to_numpy=True, show_progress_bar=False,
-        )
+        return dense_embeddings(self.model, texts)
 
     def lengths(self, texts):
         lengths = self.model.tokenizer(

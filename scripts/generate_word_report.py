@@ -1,7 +1,4 @@
-"""Script to generate a comprehensive, publication-grade Word Document (.docx)
-reporting all ICL experimental results, methodologies, parameters, and in-depth
-responses to Reviewer 1 and Reviewer 2.
-"""
+"""Rebuild the archived Word report from the original result files."""
 
 import json
 from pathlib import Path

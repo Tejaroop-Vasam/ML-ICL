@@ -1,5 +1,7 @@
 # Qwen3-0.6B — ICL Experiment Results
 
+These historical results describe the earlier evaluation. The [current reviewer runner](docs/reviewer_experiments.md) uses BGE-M3.
+
 **Model**: `Qwen/Qwen3-0.6B` (~1.2 GB, runs locally on 8GB M1 Mac via MPS)
 **Evaluation**: 30 test samples per run · seed = 42 · datasets: SST-2, AG News, TREC
 

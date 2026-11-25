@@ -31,6 +31,7 @@ for _mod in ("torchvision", "torchaudio"):
 
 from src.data import get_dataset
 from src.models import get_model
+from src.retrieval import BGE_M3_ID
 from src.evaluation import ICLEvaluator
 from src.selection import RandomSelector, SimilaritySelector, BudgetAwareSelector
 
@@ -53,6 +54,7 @@ FORMATS       = ["plain", "structured", "rationale"]
 ORDERINGS     = ["similar_last", "similar_first", "random"]
 K_VALUES      = [0, 2, 4, 8]
 SEEDS         = [42, 101, 2024]
+DENSE_METHOD  = "BGE-M3 kNN"
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,8 +62,19 @@ SEEDS         = [42, 101, 2024]
 def save_json(data: dict, path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump({**data, "retriever_id": BGE_M3_ID}, f, indent=2)
     logger.info(f"Saved → {path}")
+
+
+def load_cached_results(path: Path):
+    if not path.is_file():
+        return None
+    with path.open() as file:
+        data = json.load(file)
+    if data.get("retriever_id") != BGE_M3_ID:
+        raise ValueError(f"{path} belongs to an earlier run. Choose a fresh --out_dir for BGE-M3.")
+    logger.info("[SKIPPED] %s already exists.", path.name)
+    return data["results"]
 
 
 # ─── Experiment Runners ────────────────────────────────────────────────────────
@@ -69,10 +82,9 @@ def save_json(data: dict, path: Path):
 def run_baselines(llm, model_name, dataset, n_eval, k, seeds, out_dir):
     """Zero-Shot vs Random vs Similarity across seeds."""
     out_file = out_dir / f"baselines_{dataset}_{model_name}.json"
-    if out_file.exists():
-        logger.info(f"[SKIPPED] {out_file.name} already exists.")
-        with open(out_file) as f:
-            return json.load(f).get("results", {})
+    cached = load_cached_results(out_file)
+    if cached is not None:
+        return cached
 
     logger.info(f"\n{'='*60}")
     logger.info(f"[BASELINES] model={model_name} dataset={dataset} k={k}")
@@ -85,7 +97,7 @@ def run_baselines(llm, model_name, dataset, n_eval, k, seeds, out_dir):
     configs = [
         ("Zero-Shot",       None,                           0),
         ("Random",          RandomSelector(pool, seed=42),  k),
-        ("Similarity-kNN",  SimilaritySelector(pool, seed=42), k),
+        (DENSE_METHOD,      SimilaritySelector(pool, seed=42), k),
     ]
 
     results = {}
@@ -110,10 +122,9 @@ def run_baselines(llm, model_name, dataset, n_eval, k, seeds, out_dir):
 def run_format_study(llm, model_name, dataset, n_eval, k, out_dir):
     """Compare plain vs structured vs rationale prompt formats."""
     out_file = out_dir / f"formats_{dataset}_{model_name}.json"
-    if out_file.exists():
-        logger.info(f"[SKIPPED] {out_file.name} already exists.")
-        with open(out_file) as f:
-            return json.load(f).get("results", {})
+    cached = load_cached_results(out_file)
+    if cached is not None:
+        return cached
 
     logger.info(f"\n[FORMATS] model={model_name} dataset={dataset} k={k}")
 
@@ -135,10 +146,9 @@ def run_format_study(llm, model_name, dataset, n_eval, k, out_dir):
 def run_ordering_study(llm, model_name, dataset, n_eval, k, out_dir):
     """Compare similar_last vs similar_first vs random ordering."""
     out_file = out_dir / f"ordering_{dataset}_{model_name}.json"
-    if out_file.exists():
-        logger.info(f"[SKIPPED] {out_file.name} already exists.")
-        with open(out_file) as f:
-            return json.load(f).get("results", {})
+    cached = load_cached_results(out_file)
+    if cached is not None:
+        return cached
 
     logger.info(f"\n[ORDERING] model={model_name} dataset={dataset} k={k}")
 
@@ -160,10 +170,9 @@ def run_ordering_study(llm, model_name, dataset, n_eval, k, out_dir):
 def run_k_sweep(llm, model_name, dataset, n_eval, out_dir):
     """Sweep k ∈ {0, 2, 4, 8} to study demonstration scaling."""
     out_file = out_dir / f"k_sweep_{dataset}_{model_name}.json"
-    if out_file.exists():
-        logger.info(f"[SKIPPED] {out_file.name} already exists.")
-        with open(out_file) as f:
-            return json.load(f).get("results", {})
+    cached = load_cached_results(out_file)
+    if cached is not None:
+        return cached
 
     logger.info(f"\n[K-SWEEP] model={model_name} dataset={dataset}")
 
@@ -171,10 +180,11 @@ def run_k_sweep(llm, model_name, dataset, n_eval, out_dir):
     ev     = ICLEvaluator(loader, llm)
     pool   = loader.get_candidate_demonstration_pool(pool_size=200, seed=42)
 
-    results = {"Random": {}, "Similarity-kNN": {}}
+    results = {"Random": {}, DENSE_METHOD: {}}
+    selectors = {"Random": RandomSelector(pool, seed=42), DENSE_METHOD: SimilaritySelector(pool, seed=42)}
     for k in K_VALUES:
-        for method_name, sel_cls in [("Random", RandomSelector), ("Similarity-kNN", SimilaritySelector)]:
-            sel = None if k == 0 else sel_cls(pool, seed=42)
+        for method_name, selector in selectors.items():
+            sel = None if k == 0 else selector
             r = ev.run_evaluation(selector=sel, k=k, n_eval=n_eval, seed=42, show_progress=False)
             results[method_name][str(k)] = {"accuracy": r.accuracy, "macro_f1": r.macro_f1,
                                              "mean_prompt_tokens": r.mean_prompt_tokens}
@@ -267,8 +277,8 @@ def generate_plots(results_dir: Path, figures_dir: Path):
         # ── k-sweep line chart ───────────────────────────────────────────────
         elif exp_type == "exp2_k_sweep":
             fig, ax = plt.subplots(figsize=(8, 4.5))
-            markers = {"Random": "o", "Similarity-kNN": "s"}
-            colors  = {"Random": "#4C72B0", "Similarity-kNN": "#C44E52"}
+            markers = {"Random": "o", "Similarity-kNN": "s", DENSE_METHOD: "s"}
+            colors  = {"Random": "#4C72B0", "Similarity-kNN": "#C44E52", DENSE_METHOD: "#C44E52"}
             for method, k_dict in results.items():
                 k_vals = sorted([int(k) for k in k_dict])
                 accs   = [k_dict[str(k)]["accuracy"] * 100 for k in k_vals]
@@ -300,7 +310,7 @@ def main():
                         help="Number of few-shot demonstrations (default: 4)")
     parser.add_argument("--seeds",    nargs="+", type=int, default=[42],
                         help="Random seeds for baseline variance (default: 42)")
-    parser.add_argument("--out_dir",  type=str, default="results",
+    parser.add_argument("--out_dir",  type=str, default="results/bge_m3",
                         help="Directory to save JSON results and figures")
     parser.add_argument("--plot_only", action="store_true",
                         help="Skip experiments, only generate plots from existing JSONs")

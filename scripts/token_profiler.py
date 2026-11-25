@@ -26,7 +26,7 @@ def get_token_counter():
     """Attempt to load a fast BPE tokenizer; fallback to calibrated word-to-token ratio."""
     try:
         from transformers import AutoTokenizer
-        for model_id in ["Qwen/Qwen2.5-0.5B", "sentence-transformers/all-MiniLM-L6-v2", "gpt2"]:
+        for model_id in ["Qwen/Qwen3-8B", "Qwen/Qwen2.5-0.5B", "gpt2"]:
             try:
                 tok = AutoTokenizer.from_pretrained(model_id, local_files_only=False)
                 return lambda text: len(tok.encode(text, add_special_tokens=False))
